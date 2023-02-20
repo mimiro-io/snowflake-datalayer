@@ -42,3 +42,31 @@ audience and an issuer, a jwt Bearer token will be validated. Currently only tok
 be allowed to write to the endpoint.
 
 You can also enable log-type=json when running a server to get json formatted log output.
+
+## Connecting to Snowflake
+
+Currently this layer is keyed for Mimiro Snowflake only, so you must use a cert. Not that this code doesn't yet support 
+encrypted certificates, you you will have to regenerate the certs once this works.
+
+### Generating compatible certs
+
+Generate your certificate:
+
+```shell
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:65537 | openssl pkcs8 -topk8 -nocrypt -outform der > rsa-2048-private-key.p8
+```
+
+Generate the public key:
+```shell
+openssl pkey -pubout -inform der -outform der -in rsa-2048-private-key.p8 -out rsa-2048-public-key.spki
+```
+
+Generate base64 url encoded strings from the binary certificate files:
+```shell
+make flake
+bin/flake encode --input rsa-2048-private-key.p8
+bin/flake endoce --input rsa-2048-public-key.spki
+```
+
+You then need to start the flake command with the output from the private cert, and you need to update your user
+in Snowflake with the public key.
