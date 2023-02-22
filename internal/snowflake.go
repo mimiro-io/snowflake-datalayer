@@ -12,11 +12,9 @@ import (
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
 	sf "github.com/snowflakedb/gosnowflake"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type pool struct {
@@ -47,15 +45,14 @@ func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
 
 		//privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
 		config := &sf.Config{
-			Account:          cfg.SnowflakeAccount,
-			User:             cfg.SnowflakeUser,
-			Database:         cfg.SnowflakeDb,
-			Schema:           cfg.SnowflakeSchema,
-			Warehouse:        cfg.SnowflakeWarehouse,
-			Region:           "eu-west-1",
-			Authenticator:    sf.AuthTypeJwt,
-			JWTExpireTimeout: 5 * time.Minute,
-			PrivateKey:       parsedKey.(*rsa.PrivateKey),
+			Account:       cfg.SnowflakeAccount,
+			User:          cfg.SnowflakeUser,
+			Database:      cfg.SnowflakeDb,
+			Schema:        cfg.SnowflakeSchema,
+			Warehouse:     cfg.SnowflakeWarehouse,
+			Region:        "eu-west-1",
+			Authenticator: sf.AuthTypeJwt,
+			PrivateKey:    parsedKey.(*rsa.PrivateKey),
 		}
 		s, err := sf.DSN(config)
 		if err != nil {
@@ -138,7 +135,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	// then upload to staging
 	files := make([]string, 0)
 
-	stage := "DATAHUB_MIMIRO.DATAHUB_TEST.S_" + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
+	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
 	_, err = p.db.Exec(fmt.Sprintf(`
 	CREATE STAGE IF NOT EXISTS %s
 	    copy_options = (on_error='skip_file')
@@ -157,7 +154,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 }
 
 func (sf *Snowflake) Load(dataset string, files []string) error {
-	stage := "DATAHUB_MIMIRO.DATAHUB_TEST.S_" + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
+	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	tableName := strings.ToUpper(strings.ReplaceAll("datahub."+dataset, ".", "_"))
 
 	if _, err := p.db.Exec(fmt.Sprintf(`
@@ -192,14 +189,4 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 	}
 	sf.log.Trace().Msgf("Done with %s", files)
 	return nil
-}
-
-var letters = []rune("0123456789abcdefghijklmnopqrstuvwxyz")
-
-func randSeq(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }

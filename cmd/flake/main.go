@@ -68,7 +68,7 @@ func main() {
 				}
 
 				internal.LoadLogger(cfg.LogType, cfg.ServiceName, cfg.LogLevel)
-				internal.LOG.Debug().Any("With config", cfg).Msg("Configuration")
+				internal.LOG.Trace().Any("With config", cfg).Msg("Configuration")
 
 				if err := cfg.Validate(); err != nil {
 					internal.LOG.Panic().Err(err).Msg("")
