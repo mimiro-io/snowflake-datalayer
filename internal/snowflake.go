@@ -14,7 +14,9 @@ import (
 	sf "github.com/snowflakedb/gosnowflake"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 type pool struct {
@@ -45,14 +47,15 @@ func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
 
 		//privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
 		config := &sf.Config{
-			Account:       cfg.SnowflakeAccount,
-			Database:      cfg.SnowflakeDb,
-			Schema:        cfg.SnowflakeSchema,
-			Warehouse:     cfg.SnowflakeWarehouse,
-			User:          cfg.SnowflakeUser,
-			Region:        "eu-west-1",
-			Authenticator: sf.AuthTypeJwt,
-			PrivateKey:    parsedKey.(*rsa.PrivateKey),
+			Account:          cfg.SnowflakeAccount,
+			User:             cfg.SnowflakeUser,
+			Database:         cfg.SnowflakeDb,
+			Schema:           cfg.SnowflakeSchema,
+			Warehouse:        cfg.SnowflakeWarehouse,
+			Region:           "eu-west-1",
+			Authenticator:    sf.AuthTypeJwt,
+			JWTExpireTimeout: 5 * time.Minute,
+			PrivateKey:       parsedKey.(*rsa.PrivateKey),
 		}
 		s, err := sf.DSN(config)
 		if err != nil {
@@ -82,25 +85,26 @@ func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
 	}, nil
 }
 
-func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity) error {
+// Put returns a list of already uploaded files to be loaded into snowflake, Load must be called subsequently to finnish the process
+func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity) ([]string, error) {
 	// we will handle snowflake in 2 steps, first write each batch as a ndjson file
 	file, err := os.CreateTemp("", dataset)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	LOG.Debug().Msg(file.Name())
 
 	j := jsons.NewFileWriter(file.Name())
 	if err := j.Open(); err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		_ = j.Close()
+		_ = os.Remove(file.Name())
 	}()
 
 	for _, entity := range entities {
 		entity.ID = uda.ToURI(entityContext, entity.ID)
+		entity.Dataset = dataset
 
 		// do references
 		newRefs := make(map[string]any)
@@ -132,23 +136,34 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	}
 
 	// then upload to staging
-	stage := strings.ReplaceAll(dataset, ".", "_") + "_" + randSeq(10)
-	tableName := strings.ReplaceAll("datahub."+dataset, ".", "_")
+	files := make([]string, 0)
+
+	stage := "DATAHUB_MIMIRO.DATAHUB_TEST.S_" + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
 	_, err = p.db.Exec(fmt.Sprintf(`
-	CREATE STAGE %s
+	CREATE STAGE IF NOT EXISTS %s
 	    copy_options = (on_error='skip_file')
 	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
 	`, stage))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := p.db.Query(fmt.Sprintf("PUT file:///%s @%s auto_compress=true overwrite=false", file.Name(), stage)); err != nil {
-		return err
+	sf.log.Debug().Msgf("Uploading %s", file.Name())
+	if _, err := p.db.Query(fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
+		return files, err
 	}
+	files = append(files, filepath.Base(file.Name()))
+
+	return files, nil
+}
+
+func (sf *Snowflake) Load(dataset string, files []string) error {
+	stage := "DATAHUB_MIMIRO.DATAHUB_TEST.S_" + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
+	tableName := strings.ToUpper(strings.ReplaceAll("datahub."+dataset, ".", "_"))
+
 	if _, err := p.db.Exec(fmt.Sprintf(`
-	CREATE OR REPLACE TABLE %s (
+	CREATE TABLE IF NOT EXISTS DATAHUB_MIMIRO.DATAHUB_TEST.%s (
   		id varchar,
-  		recorded integer,
+		recorded integer,
   		deleted boolean,
   		entity variant
 	);
@@ -156,20 +171,26 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 		return err
 	}
 
-	if _, err := p.db.Exec(fmt.Sprintf(`
-	COPY INTO %s(id, recorded, deleted, entity)
+	fileString := "'" + strings.Join(files, "', '") + "'"
+
+	sf.log.Trace().Msgf("Loading %s", fileString)
+	q := fmt.Sprintf(`
+	COPY INTO DATAHUB_MIMIRO.DATAHUB_TEST.%s(id, recorded, deleted, entity)
 	    FROM (
-	    	select
+	    	SELECT
  			$1:id::varchar,
- 			$1:recorded::integer,
+			$1:recorded::integer,
  			$1:deleted::boolean,
  			$1::variant
 	    	FROM @%s)
-		file_format = (TYPE='json');
-`, tableName, stage)); err != nil {
+	FILE_FORMAT = (TYPE='json') 
+	FILES = (%s);
+`, tableName, stage, fileString)
+	sf.log.Trace().Msg(q)
+	if _, err := p.db.Query(q); err != nil {
 		return err
 	}
-
+	sf.log.Trace().Msgf("Done with %s", files)
 	return nil
 }
 

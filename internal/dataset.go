@@ -32,6 +32,7 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 	var read int64 = 0
 	entities := make([]*Entity, 0)
 	esp := NewEntityStreamParser()
+	files := make([]string, 0)
 
 	var entityContext *uda.Context
 	err := esp.ParseStream(reader, func(entity *Entity) error {
@@ -45,8 +46,10 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 			}
 			if read == batchSize {
 				read = 0
-				if err := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
+				if f, err := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
 					return err
+				} else {
+					files = append(files, f...)
 				}
 				entities = make([]*Entity, 0)
 			}
@@ -57,7 +60,18 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 		return err
 	}
 	if read > 0 {
-		return ds.sf.Put(ctx, dataset, entityContext, entities)
+		if f, err := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
+			return err
+		} else {
+			files = append(files, f...)
+		}
 	}
+	if len(files) > 0 {
+		err := ds.sf.Load(dataset, files)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

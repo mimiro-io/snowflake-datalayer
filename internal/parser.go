@@ -14,6 +14,7 @@ type Entity struct {
 	ID         string         `json:"id"`
 	Recorded   uint64         `json:"recorded"`
 	IsDeleted  bool           `json:"deleted"`
+	Dataset    string         `json:"dataset"`
 	References map[string]any `json:"refs"`
 	Properties map[string]any `json:"props"`
 }
