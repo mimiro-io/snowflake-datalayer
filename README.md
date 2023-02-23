@@ -1,5 +1,7 @@
 # Snowflake Datalayer for Mimimro DataHub
 
+[![CI](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml/badge.svg)](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml)
+
 ## Usage
 
 The flake binary can be used in 2 modes; server and client.
