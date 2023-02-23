@@ -32,6 +32,7 @@ func LoadLogger(logType, serviceName, level string) {
 		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
 		LOG = zerolog.New(output).With().Caller().Timestamp().Logger()
 	default:
+		zerolog.MessageFieldName = "msg"
 		zerolog.TimestampFieldName = "ts"
 		LOG = log.With().Caller().Timestamp().Str("service", serviceName).Str("source", "go").Logger()
 	}
