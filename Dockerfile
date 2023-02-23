@@ -33,6 +33,7 @@ WORKDIR /root/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/flake .
+COPY --from=builder /etc/passwd /etc/passwd
 
 # server configs
 ENV LOG_TYPE=json \
@@ -47,7 +48,9 @@ ENV LOG_TYPE=json \
   WELL_KNOWN=https://auth.dev.mimiro.io/jwks/.well-known/jwks.json \
   ISSUER=https://api.dev.mimiro.io \
   AUDIENCE=https://api.dev.mimiro.io \
-  AUTHENTICATOR=jwt
+  AUTHENTICATOR=jwt \
+  HOME=/ \
+  USER=5678
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
