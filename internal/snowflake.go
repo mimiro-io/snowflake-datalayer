@@ -162,6 +162,7 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
   		id varchar,
 		recorded integer,
   		deleted boolean,
+  		dataset varchar,
   		entity variant
 	);
 	`, tableName)); err != nil {
@@ -172,17 +173,18 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 
 	sf.log.Trace().Msgf("Loading %s", fileString)
 	q := fmt.Sprintf(`
-	COPY INTO DATAHUB_MIMIRO.DATAHUB_TEST.%s(id, recorded, deleted, entity)
+	COPY INTO DATAHUB_MIMIRO.DATAHUB_TEST.%s(id, recorded, deleted, dataset, entity)
 	    FROM (
 	    	SELECT
  			$1:id::varchar,
 			$1:recorded::integer,
  			$1:deleted::boolean,
+			'%s'::varchar,
  			$1::variant
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json') 
 	FILES = (%s);
-`, tableName, stage, fileString)
+`, tableName, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
 	if _, err := p.db.Query(q); err != nil {
 		return err
