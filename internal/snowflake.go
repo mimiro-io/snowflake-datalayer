@@ -92,6 +92,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 
 	j := jsons.NewFileWriter(file.Name())
 	if err := j.Open(); err != nil {
+		sf.log.Warn().Err(err).Msg(err.Error())
 		return nil, err
 	}
 	defer func() {
@@ -128,7 +129,6 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 		}
 		entity.Properties = newProps
 
-		sf.log.Trace().Any("entity", entity).Msg(entity.ID)
 		j.Add(entity)
 	}
 
@@ -136,11 +136,13 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	files := make([]string, 0)
 
 	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
-	_, err = p.db.Exec(fmt.Sprintf(`
+	q := fmt.Sprintf(`
 	CREATE STAGE IF NOT EXISTS %s
 	    copy_options = (on_error='skip_file')
 	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
-	`, stage))
+	`, stage)
+	sf.log.Debug().Msg(q)
+	_, err = p.db.Exec(q)
 	if err != nil {
 		return nil, err
 	}
@@ -154,18 +156,19 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 }
 
 func (sf *Snowflake) Load(dataset string, files []string) error {
-	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
+	nameSpace := fmt.Sprintf("%s.%s", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema))
+	stage := fmt.Sprintf("%s.S_", nameSpace) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	tableName := strings.ToUpper(strings.ReplaceAll("datahub."+dataset, ".", "_"))
 
 	if _, err := p.db.Exec(fmt.Sprintf(`
-	CREATE TABLE IF NOT EXISTS DATAHUB_MIMIRO.DATAHUB_TEST.%s (
+	CREATE TABLE IF NOT EXISTS %s.%s (
   		id varchar,
 		recorded integer,
   		deleted boolean,
   		dataset varchar,
   		entity variant
 	);
-	`, tableName)); err != nil {
+	`, nameSpace, tableName)); err != nil {
 		return err
 	}
 
@@ -173,7 +176,7 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 
 	sf.log.Trace().Msgf("Loading %s", fileString)
 	q := fmt.Sprintf(`
-	COPY INTO DATAHUB_MIMIRO.DATAHUB_TEST.%s(id, recorded, deleted, dataset, entity)
+	COPY INTO %s.%s(id, recorded, deleted, dataset, entity)
 	    FROM (
 	    	SELECT
  			$1:id::varchar,
@@ -184,7 +187,7 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json') 
 	FILES = (%s);
-`, tableName, dataset, stage, fileString)
+`, nameSpace, tableName, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
 	if _, err := p.db.Query(q); err != nil {
 		return err

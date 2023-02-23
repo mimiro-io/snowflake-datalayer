@@ -36,6 +36,7 @@ func LoadLogger(logType, serviceName, level string) {
 		zerolog.TimestampFieldName = "ts"
 		LOG = log.With().Caller().Timestamp().Str("service", serviceName).Str("source", "go").Logger()
 	}
+	LOG.Info().Msgf("Log level set to %s", level)
 }
 
 func setLevel(level string) {
