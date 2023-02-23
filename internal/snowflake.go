@@ -141,7 +141,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	    copy_options = (on_error='skip_file')
 	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
 	`, stage)
-	sf.log.Debug().Msg(q)
+	sf.log.Trace().Msg(q)
 	_, err = p.db.Exec(q)
 	if err != nil {
 		return nil, err
