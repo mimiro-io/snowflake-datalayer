@@ -37,7 +37,7 @@ COPY --from=builder /app/flake .
 # server configs
 ENV LOG_TYPE=json \
   LOG_LEVEL=info \
-  SERVICE=datahub-snowflake-datalayer \
+  SERVICE_NAME=datahub-snowflake-datalayer \
   PORT=8080 \
   SNOWFLAKE_USER=<user> \
   SNOWFLAKE_PASSWORD=<password> \

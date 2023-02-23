@@ -72,7 +72,7 @@ func (c *Config) LoadEnv() error {
 	elems := []string{
 		"LogType:LOG_TYPE",
 		"LogLevel:LOG_LEVEL",
-		"ServiceName:SERVICE",
+		"ServiceName:SERVICE_NAME",
 		"File:FILE",
 		"SnowflakeUser:SNOWFLAKE_USER",
 		"SnowflakePassword:SNOWFLAKE_PASSWORD",
