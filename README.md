@@ -47,8 +47,8 @@ You can also enable log-type=json when running a server to get json formatted lo
 
 ## Connecting to Snowflake
 
-Currently this layer is keyed for Mimiro Snowflake only, so you must use a cert. Not that this code doesn't yet support 
-encrypted certificates, you you will have to regenerate the certs once this works.
+Currently, this layer is keyed for Mimiro Snowflake only, so you must use a cert. Not that this code doesn't yet support 
+encrypted certificates, you will have to regenerate the certs once this works.
 
 ### Generating compatible certs
 
