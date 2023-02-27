@@ -109,13 +109,20 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 		for refKey, refValue := range entity.References {
 			// we need to do both key and value replacing
 			key := uda.ToURI(entityContext, refKey)
-			if values, ok := refValue.([]any); ok {
+			switch values := refValue.(type) {
+			case []any:
 				var newValues []string
 				for _, val := range values {
 					newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
 				}
 				newRefs[key] = newValues
-			} else {
+			case []string:
+				var newValues []string
+				for _, val := range values {
+					newValues = append(newValues, uda.ToURI(entityContext, val))
+				}
+				newRefs[key] = newValues
+			default:
 				newRefs[key] = uda.ToURI(entityContext, refValue.(string))
 			}
 		}
