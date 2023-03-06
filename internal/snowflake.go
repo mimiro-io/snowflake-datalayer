@@ -167,7 +167,15 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 	stage := fmt.Sprintf("%s.S_", nameSpace) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	tableName := strings.ToUpper(strings.ReplaceAll("datahub."+dataset, ".", "_"))
 
-	if _, err := p.db.Exec(fmt.Sprintf(`
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s.%s (
   		id varchar,
 		recorded integer,
@@ -194,11 +202,11 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json') 
 	FILES = (%s);
-`, nameSpace, tableName, dataset, stage, fileString)
+	`, nameSpace, tableName, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
-	if _, err := p.db.Query(q); err != nil {
+	if _, err := tx.Query(q); err != nil {
 		return err
 	}
 	sf.log.Trace().Msgf("Done with %s", files)
-	return nil
+	return tx.Commit()
 }
