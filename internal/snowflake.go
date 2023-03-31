@@ -11,7 +11,7 @@ import (
 	"github.com/bfontaine/jsons"
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
-	sf "github.com/snowflakedb/gosnowflake"
+	gsf "github.com/snowflakedb/gosnowflake"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,17 +44,17 @@ func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
 		}
 
 		//privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
-		config := &sf.Config{
+		config := &gsf.Config{
 			Account:       cfg.SnowflakeAccount,
 			User:          cfg.SnowflakeUser,
 			Database:      cfg.SnowflakeDb,
 			Schema:        cfg.SnowflakeSchema,
 			Warehouse:     cfg.SnowflakeWarehouse,
 			Region:        "eu-west-1",
-			Authenticator: sf.AuthTypeJwt,
+			Authenticator: gsf.AuthTypeJwt,
 			PrivateKey:    parsedKey.(*rsa.PrivateKey),
 		}
-		s, err := sf.DSN(config)
+		s, err := gsf.DSN(config)
 		if err != nil {
 			return nil, err
 		}
@@ -84,6 +84,20 @@ func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
 
 // Put returns a list of already uploaded files to be loaded into snowflake, Load must be called subsequently to finnish the process
 func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity) ([]string, error) {
+	// by starting with the sql before creating any files, then if no session is valid, we should prevent creating files we won't use
+	// as it fails early
+	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
+	q := fmt.Sprintf(`
+	CREATE STAGE IF NOT EXISTS %s
+	    copy_options = (on_error='skip_file')
+	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
+	`, stage)
+	sf.log.Trace().Msg(q)
+	_, err := p.db.Exec(q)
+	if err != nil {
+		return nil, err
+	}
+
 	// we will handle snowflake in 2 steps, first write each batch as a ndjson file
 	file, err := os.CreateTemp("", dataset)
 	if err != nil {
@@ -141,18 +155,6 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 
 	// then upload to staging
 	files := make([]string, 0)
-
-	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
-	q := fmt.Sprintf(`
-	CREATE STAGE IF NOT EXISTS %s
-	    copy_options = (on_error='skip_file')
-	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
-	`, stage)
-	sf.log.Trace().Msg(q)
-	_, err = p.db.Exec(q)
-	if err != nil {
-		return nil, err
-	}
 	sf.log.Debug().Msgf("Uploading %s", file.Name())
 	if _, err := p.db.Query(fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
 		return files, err
