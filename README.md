@@ -1,4 +1,4 @@
-# Snowflake Datalayer for Mimimro DataHub
+# Snowflake Datalayer for Mimiro DataHub
 
 [![CI](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml/badge.svg)](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml)
 
@@ -63,12 +63,21 @@ Generate the public key:
 openssl pkey -pubout -inform der -outform der -in rsa-2048-private-key.p8 -out rsa-2048-public-key.spki
 ```
 
-Generate base64 url encoded strings from the binary certificate files:
+Generate base64 url encoded strings from the binary certificate files, two options:
+1:
 ```shell
-make flake
+make build
 bin/flake encode --input rsa-2048-private-key.p8
 bin/flake endoce --input rsa-2048-public-key.spki
 ```
 
-You then need to start the flake command with the output from the private cert, and you need to update your user
-in Snowflake with the public key.
+2: You can use openssl if you dont want to build
+```
+openssl base64 -in rsa-2048-private-key.p8 -out rsa-2048-private-key.base64.p8
+openssl base64 -in rsa-2048-public-key.spki -out rsa-2048-public-key.base64.spki
+```
+
+You then need to update your user in Snowflake with the public key.
+```
+ALTER USER <DB username> SET RSA_PUBLIC_KEY='<paste pub key here>'
+```
