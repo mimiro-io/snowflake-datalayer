@@ -28,7 +28,7 @@ func NewDataset(cfg Config, sf *Snowflake, m statsd.ClientInterface) *Dataset {
 }
 
 func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) error {
-	var batchSize int64 = 10000
+	var batchSize int64 = 50000
 	if s, ok := ctx.Value("batchSize").(int64); ok {
 		batchSize = s
 	}
