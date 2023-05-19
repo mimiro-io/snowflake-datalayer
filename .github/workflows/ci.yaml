@@ -9,7 +9,7 @@ on:
       - published
 jobs:
   AWS:
-    uses: mimiro-io/.github/.github/workflows/docker.yaml@main
+    uses: mimiro-io/github-actions/.github/workflows/docker.yaml@main
     with:
       skip_irsa: true
     secrets:
