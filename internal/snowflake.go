@@ -7,14 +7,15 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"github.com/DataDog/datadog-go/v5/statsd"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/bfontaine/jsons"
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
 	gsf "github.com/snowflakedb/gosnowflake"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 type pool struct {
@@ -28,7 +29,7 @@ type Snowflake struct {
 	log zerolog.Logger
 }
 
-func NewSnowflake(cfg Config, _ statsd.ClientInterface) (*Snowflake, error) {
+func NewSnowflake(cfg Config) (*Snowflake, error) {
 	// let's see what we have
 	connectionString := "%s:%s@%s"
 	if cfg.PrivateCert != "" {
@@ -104,59 +105,60 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 		return nil, err
 	}
 
-	j := jsons.NewFileWriter(file.Name())
-	if err := j.Open(); err != nil {
-		sf.log.Warn().Err(err).Msg(err.Error())
-		return nil, err
-	}
+	pipeReader, pipeWriter := io.Pipe()
+	j := jsons.NewWriter(pipeWriter)
 	defer func() {
-		_ = j.Close()
-		_ = os.Remove(file.Name())
+		pipeReader.Close()
+		pipeWriter.Close()
 	}()
 
-	for _, entity := range entities {
-		entity.ID = uda.ToURI(entityContext, entity.ID)
-		entity.Dataset = dataset
+	go func() {
 
-		// do references
-		newRefs := make(map[string]any)
-		for refKey, refValue := range entity.References {
-			// we need to do both key and value replacing
-			key := uda.ToURI(entityContext, refKey)
-			switch values := refValue.(type) {
-			case []any:
-				var newValues []string
-				for _, val := range values {
-					newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
+		for _, entity := range entities {
+			entity.ID = uda.ToURI(entityContext, entity.ID)
+			entity.Dataset = dataset
+
+			// do references
+			newRefs := make(map[string]any)
+			for refKey, refValue := range entity.References {
+				// we need to do both key and value replacing
+				key := uda.ToURI(entityContext, refKey)
+				switch values := refValue.(type) {
+				case []any:
+					var newValues []string
+					for _, val := range values {
+						newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
+					}
+					newRefs[key] = newValues
+				case []string:
+					var newValues []string
+					for _, val := range values {
+						newValues = append(newValues, uda.ToURI(entityContext, val))
+					}
+					newRefs[key] = newValues
+				default:
+					newRefs[key] = uda.ToURI(entityContext, refValue.(string))
 				}
-				newRefs[key] = newValues
-			case []string:
-				var newValues []string
-				for _, val := range values {
-					newValues = append(newValues, uda.ToURI(entityContext, val))
-				}
-				newRefs[key] = newValues
-			default:
-				newRefs[key] = uda.ToURI(entityContext, refValue.(string))
 			}
+			entity.References = newRefs
+
+			// do preferences
+			newProps := make(map[string]any)
+			for refKey, refValue := range entity.Properties {
+				key := uda.ToURI(entityContext, refKey)
+				newProps[key] = refValue
+			}
+			entity.Properties = newProps
+
+			j.Add(entity)
 		}
-		entity.References = newRefs
-
-		// do preferences
-		newProps := make(map[string]any)
-		for refKey, refValue := range entity.Properties {
-			key := uda.ToURI(entityContext, refKey)
-			newProps[key] = refValue
-		}
-		entity.Properties = newProps
-
-		j.Add(entity)
-	}
-
+		pipeWriter.Close()
+	}()
 	// then upload to staging
 	files := make([]string, 0)
 	sf.log.Debug().Msgf("Uploading %s", file.Name())
-	if _, err := p.db.Query(fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
+	streamCtx := gsf.WithFileStream(ctx, pipeReader)
+	if _, err := p.db.QueryContext(streamCtx, fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
 		return files, err
 	}
 	files = append(files, filepath.Base(file.Name()))
@@ -164,10 +166,10 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	return files, nil
 }
 
-func (sf *Snowflake) Load(dataset string, files []string) error {
+func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) error {
 	nameSpace := fmt.Sprintf("%s.%s", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema))
 	stage := fmt.Sprintf("%s.S_", nameSpace) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-	tableName := strings.ToUpper(strings.ReplaceAll("datahub."+dataset, ".", "_"))
+	tableName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 
 	tx, err := p.db.Begin()
 	if err != nil {
@@ -197,14 +199,14 @@ func (sf *Snowflake) Load(dataset string, files []string) error {
 	    FROM (
 	    	SELECT
  			$1:id::varchar,
-			$1:recorded::integer,
+			%v::integer,
  			$1:deleted::boolean,
 			'%s'::varchar,
  			$1::variant
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json') 
 	FILES = (%s);
-	`, nameSpace, tableName, dataset, stage, fileString)
+	`, nameSpace, tableName, batchTimestamp, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
 	if _, err := tx.Query(q); err != nil {
 		return err
