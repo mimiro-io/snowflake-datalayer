@@ -58,7 +58,7 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 						return err2
 					}
 					if refreshed {
-						if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
+						if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err3 != nil {
 							if err3 != nil {
 								return err3 // give up at this point
 							}
@@ -88,7 +88,7 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 				return err2
 			}
 			if refreshed {
-				if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
+				if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err3 != nil {
 					if err3 != nil {
 						return err3 // give up at this point
 					}
