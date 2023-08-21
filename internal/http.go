@@ -3,9 +3,10 @@ package internal
 import (
 	"context"
 	"fmt"
-	"github.com/DataDog/datadog-go/v5/statsd"
-	"github.com/labstack/echo/v4"
 	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
 )
 
 func NewServer(cfg Config) (*echo.Echo, error) {
@@ -69,7 +70,12 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 
 	// add a group to prevent middleware on health
 	g := e.Group("/datasets")
-	g.Use(DefaultLoggerFilter(cfg, handler.m))
+
+	m, err := NewMetrics(cfg)
+	if err != nil {
+		return nil, err
+	}
+	g.Use(DefaultLoggerFilter(cfg, m.Statsd))
 	if cfg.Authenticator == "jwt" {
 		LOG.Info().Msg("Enabling jwt security")
 		g.Use(DefaultJwtFilter(cfg))
@@ -84,34 +90,26 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 }
 
 type handler struct {
-	cfg Config
-	sf  *Snowflake
-	ds  *Dataset
-	m   statsd.ClientInterface
+	ds *Dataset
 }
 
 func newHandler(cfg Config) (*handler, error) {
-	metrics, err := NewMetrics(cfg)
+	sf, err := NewSnowflake(cfg)
 	if err != nil {
 		return nil, err
 	}
-	sf, err := NewSnowflake(cfg, metrics.Statsd)
-	if err != nil {
-		return nil, err
-	}
-	ds := NewDataset(cfg, sf, metrics.Statsd)
+	ds := NewDataset(cfg, sf)
 
 	return &handler{
-		cfg: cfg,
-		sf:  sf,
-		ds:  ds,
-		m:   metrics.Statsd,
+		ds: ds,
 	}, nil
 }
 
 func (h *handler) changes(c echo.Context) error {
 	dataset := c.Param("dataset")
-	err := h.ds.Write(context.Background(), dataset, c.Request().Body)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "recorded", time.Now().UnixNano())
+	err := h.ds.Write(ctx, dataset, c.Request().Body)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

@@ -2,12 +2,12 @@ package internal
 
 import (
 	"context"
-	"github.com/DataDog/datadog-go/v5/statsd"
-	"github.com/mimiro-io/internal-go-util/pkg/uda"
-	"github.com/rs/zerolog"
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/mimiro-io/internal-go-util/pkg/uda"
+	"github.com/rs/zerolog"
 )
 
 type Dataset struct {
@@ -15,15 +15,15 @@ type Dataset struct {
 	log  zerolog.Logger
 	sf   *Snowflake
 	lock sync.Mutex
-	m    statsd.ClientInterface
+	//m    statsd.ClientInterface
 }
 
-func NewDataset(cfg Config, sf *Snowflake, m statsd.ClientInterface) *Dataset {
+func NewDataset(cfg Config, sf *Snowflake) *Dataset {
 	return &Dataset{
 		cfg: cfg,
 		log: LOG.With().Str("logger", "dataset").Logger(),
 		sf:  sf,
-		m:   m,
+		//m:   m,
 	}
 }
 
@@ -104,14 +104,15 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 		}
 	}
 	if len(files) > 0 {
-		err := ds.sf.Load(dataset, files)
+
+		err := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64))
 		if err != nil {
 			refreshed, err2 := ds.tryRefresh(err)
 			if err2 != nil {
 				return err2
 			}
 			if refreshed {
-				return ds.sf.Load(dataset, files)
+				return ds.sf.Load(dataset, files, ctx.Value("recorded").(int64))
 			} else {
 				return err
 			}
@@ -125,7 +126,7 @@ func (ds *Dataset) tryRefresh(err error) (bool, error) {
 	ds.lock.Lock()
 	defer ds.lock.Unlock()
 	if strings.Contains(err.Error(), "390114") {
-		s, err := NewSnowflake(ds.cfg, ds.m)
+		s, err := NewSnowflake(ds.cfg)
 		if err != nil {
 			return false, err
 

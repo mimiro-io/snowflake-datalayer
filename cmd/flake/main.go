@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"flag"
-	"github.com/cristalhq/acmd"
-	"github.com/mimiro-io/datahub-snowflake-datalayer/internal"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"time"
+
+	"github.com/cristalhq/acmd"
+
+	"github.com/mimiro-io/datahub-snowflake-datalayer/internal"
 )
 
 func main() {
@@ -30,15 +32,13 @@ func main() {
 				internal.LoadLogger(cfg.LogType, cfg.ServiceName, cfg.LogLevel)
 				internal.LOG.Debug().Any("With config", cfg).Msg("Configuration")
 
-				metrics, _ := internal.NewMetrics(cfg)
-
 				// set it up
-				sf, err := internal.NewSnowflake(cfg, metrics.Statsd)
+				sf, err := internal.NewSnowflake(cfg)
 				if err != nil {
 					internal.LOG.Error().Err(err).Msg("Failed to connect to snowflake")
 					return err
 				}
-				ds := internal.NewDataset(cfg, sf, metrics.Statsd)
+				ds := internal.NewDataset(cfg, sf)
 
 				// need a file reader
 				reader, err := os.Open(cfg.File)
@@ -48,6 +48,7 @@ func main() {
 				}
 
 				ctx = context.WithValue(ctx, "batchSize", 10000) // this makes sure memory won't blow up on large files
+				ctx = context.WithValue(ctx, "recorded", time.Now().UnixNano())
 				err = ds.Write(ctx, "", reader)
 				if err != nil {
 					internal.LOG.Error().Err(err).Msg(err.Error())
