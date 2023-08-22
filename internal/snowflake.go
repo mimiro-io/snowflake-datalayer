@@ -104,6 +104,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	if err != nil {
 		return nil, err
 	}
+	defer os.Remove(file.Name())
 
 	pipeReader, pipeWriter := io.Pipe()
 	j := jsons.NewWriter(pipeWriter)

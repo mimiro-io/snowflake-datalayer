@@ -1,4 +1,4 @@
-FROM golang:1.20-alpine3.17 as build_env
+FROM golang:1.21-alpine as build_env
 
 # Install git + SSL ca certificates.
 # Git is required for fetching the dependencies.
@@ -37,20 +37,20 @@ COPY --from=builder /etc/passwd /etc/passwd
 
 # server configs
 ENV LOG_TYPE=json \
-  LOG_LEVEL=info \
-  SERVICE_NAME=datahub-snowflake-datalayer \
-  PORT=8080 \
-  SNOWFLAKE_USER=<user> \
-  SNOWFLAKE_PASSWORD=<password> \
-  SNOWFLAKE_ACCOUNT=<account> \
-  SNOWFLAKE_DB=<db> \
-  SNOWFLAKE_SCHEMA=<schema> \
-  WELL_KNOWN=https://auth.dev.mimiro.io/jwks/.well-known/jwks.json \
-  ISSUER=https://api.dev.mimiro.io \
-  AUDIENCE=https://api.dev.mimiro.io \
-  AUTHENTICATOR=jwt \
-  HOME=/ \
-  USER=5678
+    LOG_LEVEL=info \
+    SERVICE_NAME=datahub-snowflake-datalayer \
+    PORT=8080 \
+    SNOWFLAKE_USER=<user> \
+    SNOWFLAKE_PASSWORD=<password> \
+    SNOWFLAKE_ACCOUNT=<account> \
+    SNOWFLAKE_DB=<db> \
+    SNOWFLAKE_SCHEMA=<schema> \
+    WELL_KNOWN=https://auth.dev.mimiro.io/jwks/.well-known/jwks.json \
+    ISSUER=https://api.dev.mimiro.io \
+    AUDIENCE=https://api.dev.mimiro.io \
+    AUTHENTICATOR=jwt \
+    HOME=/ \
+    USER=5678
 
 # Expose port 8080 to the outside world
 EXPOSE 8080

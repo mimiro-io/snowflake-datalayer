@@ -8,6 +8,7 @@ import (
 
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type Dataset struct {
@@ -126,12 +127,15 @@ func (ds *Dataset) tryRefresh(err error) (bool, error) {
 	ds.lock.Lock()
 	defer ds.lock.Unlock()
 	if strings.Contains(err.Error(), "390114") {
+		ds.log.Info().Msg("Refreshing snowflake connection")
 		s, err := NewSnowflake(ds.cfg)
 		if err != nil {
+			ds.log.Error().Err(err).Msg("Failed to reconnect to snowflake")
 			return false, err
 
 		}
 		ds.sf = s
+		log.Info().Msg("Reconnected to snowflake")
 		return true, nil
 	}
 	return false, nil
