@@ -108,21 +108,13 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	defer func() {
 		zipWriter.Close()
 		file.Close()
-		//os.Remove(file.Name())
+		os.Remove(file.Name())
 	}()
 
 	if err != nil {
 		return nil, err
 	}
 	j := jsons.NewWriter(zipWriter)
-	//pipeReader, pipeWriter := io.Pipe()
-	//j := jsons.NewWriter(pipeWriter)
-	//defer func() {
-	//	pipeReader.Close()
-	//	pipeWriter.Close()
-	//}()
-
-	//go func() {
 
 	for _, entity := range entities {
 		entity.ID = uda.ToURI(entityContext, entity.ID)
@@ -165,16 +157,20 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 			return nil, err
 		}
 	}
-	zipWriter.Close()
+
+	// flush and close
+	err = zipWriter.Close()
+	if err != nil {
+		return nil, err
+	}
 	err = file.Close()
 	if err != nil {
 		return nil, err
 	}
-	//}()
+
 	// then upload to staging
 	files := make([]string, 0)
 	sf.log.Debug().Msgf("Uploading %s", file.Name())
-	//streamCtx := gsf.WithFileStream(ctx, pipeReader)
 	if _, err := p.db.Query(fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
 		return files, err
 	}
