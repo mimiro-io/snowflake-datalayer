@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"flag"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/cristalhq/acmd"
@@ -73,25 +75,26 @@ func main() {
 
 				if err := cfg.Validate(); err != nil {
 					internal.LOG.Panic().Err(err).Msg("")
-					return nil
+					return err
 				}
 
 				e, err := internal.NewServer(cfg)
 				if err != nil {
 					internal.LOG.Error().Err(err).Msg(err.Error())
-					return nil
+					return err
 				}
 				// Start server
 				go func() {
-					if err := e.Start(":" + strconv.Itoa(cfg.Port)); err != nil && err != http.ErrServerClosed {
-						internal.LOG.Fatal().Err(err).Msg("shutting down the server")
+					if err := e.Start(":" + strconv.Itoa(cfg.Port)); err != nil && !errors.Is(err, http.ErrServerClosed) {
+						internal.LOG.Fatal().Err(err).Msg("unexpected termination")
+						panic(err)
 					}
 				}()
 
 				// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
 				// Use a buffered channel to avoid missing signals as recommended for signal.Notify
 				quit := make(chan os.Signal, 1)
-				signal.Notify(quit, os.Interrupt)
+				signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 				<-quit
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
@@ -128,6 +131,7 @@ func main() {
 		AppDescription: "Snowflake Datalayer for Mimiro DataHub",
 	})
 	if err := r.Run(); err != nil {
-		r.Exit(err)
+		panic(err)
+		//r.Exit(err)
 	}
 }
