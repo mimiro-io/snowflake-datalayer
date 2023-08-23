@@ -1,13 +1,13 @@
 package internal
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +90,7 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	stage := fmt.Sprintf("%s.%s.S_", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema)) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_")) //+ "_" + randSeq(10)
 	q := fmt.Sprintf(`
 	CREATE STAGE IF NOT EXISTS %s
-	    copy_options = (on_error='skip_file')
+		copy_options = (on_error=ABORT_STATEMENT)
 	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
 	`, stage)
 	sf.log.Trace().Msg(q)
@@ -104,62 +104,78 @@ func (sf *Snowflake) Put(ctx context.Context, dataset string, entityContext *uda
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(file.Name())
-
-	pipeReader, pipeWriter := io.Pipe()
-	j := jsons.NewWriter(pipeWriter)
+	zipWriter := gzip.NewWriter(file)
 	defer func() {
-		pipeReader.Close()
-		pipeWriter.Close()
+		zipWriter.Close()
+		file.Close()
+		//os.Remove(file.Name())
 	}()
 
-	go func() {
+	if err != nil {
+		return nil, err
+	}
+	j := jsons.NewWriter(zipWriter)
+	//pipeReader, pipeWriter := io.Pipe()
+	//j := jsons.NewWriter(pipeWriter)
+	//defer func() {
+	//	pipeReader.Close()
+	//	pipeWriter.Close()
+	//}()
 
-		for _, entity := range entities {
-			entity.ID = uda.ToURI(entityContext, entity.ID)
-			entity.Dataset = dataset
+	//go func() {
 
-			// do references
-			newRefs := make(map[string]any)
-			for refKey, refValue := range entity.References {
-				// we need to do both key and value replacing
-				key := uda.ToURI(entityContext, refKey)
-				switch values := refValue.(type) {
-				case []any:
-					var newValues []string
-					for _, val := range values {
-						newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
-					}
-					newRefs[key] = newValues
-				case []string:
-					var newValues []string
-					for _, val := range values {
-						newValues = append(newValues, uda.ToURI(entityContext, val))
-					}
-					newRefs[key] = newValues
-				default:
-					newRefs[key] = uda.ToURI(entityContext, refValue.(string))
+	for _, entity := range entities {
+		entity.ID = uda.ToURI(entityContext, entity.ID)
+		entity.Dataset = dataset
+
+		// do references
+		newRefs := make(map[string]any)
+		for refKey, refValue := range entity.References {
+			// we need to do both key and value replacing
+			key := uda.ToURI(entityContext, refKey)
+			switch values := refValue.(type) {
+			case []any:
+				var newValues []string
+				for _, val := range values {
+					newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
 				}
+				newRefs[key] = newValues
+			case []string:
+				var newValues []string
+				for _, val := range values {
+					newValues = append(newValues, uda.ToURI(entityContext, val))
+				}
+				newRefs[key] = newValues
+			default:
+				newRefs[key] = uda.ToURI(entityContext, refValue.(string))
 			}
-			entity.References = newRefs
-
-			// do preferences
-			newProps := make(map[string]any)
-			for refKey, refValue := range entity.Properties {
-				key := uda.ToURI(entityContext, refKey)
-				newProps[key] = refValue
-			}
-			entity.Properties = newProps
-
-			j.Add(entity)
 		}
-		pipeWriter.Close()
-	}()
+		entity.References = newRefs
+
+		// do preferences
+		newProps := make(map[string]any)
+		for refKey, refValue := range entity.Properties {
+			key := uda.ToURI(entityContext, refKey)
+			newProps[key] = refValue
+		}
+		entity.Properties = newProps
+
+		err := j.Add(entity)
+		if err != nil {
+			return nil, err
+		}
+	}
+	zipWriter.Close()
+	err = file.Close()
+	if err != nil {
+		return nil, err
+	}
+	//}()
 	// then upload to staging
 	files := make([]string, 0)
 	sf.log.Debug().Msgf("Uploading %s", file.Name())
-	streamCtx := gsf.WithFileStream(ctx, pipeReader)
-	if _, err := p.db.QueryContext(streamCtx, fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
+	//streamCtx := gsf.WithFileStream(ctx, pipeReader)
+	if _, err := p.db.Query(fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage)); err != nil {
 		return files, err
 	}
 	files = append(files, filepath.Base(file.Name()))
@@ -205,7 +221,7 @@ func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) 
 			'%s'::varchar,
  			$1::variant
 	    	FROM @%s)
-	FILE_FORMAT = (TYPE='json') 
+	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP) 
 	FILES = (%s);
 	`, nameSpace, tableName, batchTimestamp, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
