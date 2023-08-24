@@ -28,6 +28,78 @@ func NewDataset(cfg Config, sf *Snowflake) *Dataset {
 	}
 }
 
+func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) error {
+	var stage string
+	if info.fsStart && info.fsId != "" {
+		var err error
+		stage, err = ds.sf.mkStage(info.fsId, info.name)
+		if err != nil {
+			ds.log.Error().Str("stage", stage).Msg("Failed to create stage")
+			return err
+		}
+		ds.log.Info().Str("stage", stage).Msg("Created stage")
+	} else {
+		stage = ds.sf.getStage(info.fsId, info.name)
+	}
+	var batchSize int64 = 50000
+	if s, ok := ctx.Value("batchSize").(int64); ok {
+		batchSize = s
+	}
+
+	isFirst := true
+	var read int64 = 0
+	entities := make([]*Entity, 0)
+	esp := NewEntityStreamParser()
+
+	var entityContext *uda.Context
+	err := esp.ParseStream(reader, func(entity *Entity) error {
+		if isFirst {
+			isFirst = false
+			entityContext = AsContext(entity)
+		} else {
+			if entity.ID != "@continuation" {
+				entities = append(entities, entity)
+				read++
+			}
+			if read == batchSize {
+				var err error
+				err = ds.safePut(info.name, stage, entityContext, entities)
+				if err != nil {
+					return err
+				}
+				read = 0
+				entities = make([]*Entity, 0)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if read > 0 {
+		err = ds.safePut(info.name, stage, entityContext, entities)
+		if err != nil {
+			return err
+		}
+	}
+	if info.fsEnd {
+		ds.log.Info().Str("stage", stage).Msg("Loading fullsync stage")
+		err := ds.sf.LoadStage(info.name, stage, ctx.Value("recorded").(int64))
+		if err != nil {
+			refreshed, err2 := ds.tryRefresh(err)
+			if err2 != nil {
+				return err2
+			}
+			if refreshed {
+				return ds.sf.LoadStage(info.name, stage, ctx.Value("recorded").(int64))
+			} else {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) error {
 	var batchSize int64 = 50000
 	if s, ok := ctx.Value("batchSize").(int64); ok {
@@ -51,29 +123,11 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 				read++
 			}
 			if read == batchSize {
-				read = 0
-				if f, err := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
-					refreshed, err2 := ds.tryRefresh(err)
-					if err2 != nil {
-						// failed to reset snowflake driver
-						return err2
-					}
-					if refreshed {
-						if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err3 != nil {
-							if err3 != nil {
-								return err3 // give up at this point
-							}
-						} else {
-							files = append(files, f...)
-						}
-
-					} else {
-						return err
-					}
-				} else {
-					files = append(files, f...)
+				var err error
+				read, entities, files, err = ds.safeEnsureStageAndPut(ctx, dataset, entityContext, entities, files)
+				if err != nil {
+					return err
 				}
-				entities = make([]*Entity, 0)
 			}
 		}
 		return nil
@@ -82,27 +136,7 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 		return err
 	}
 	if read > 0 {
-		if f, err := ds.sf.Put(ctx, dataset, entityContext, entities); err != nil {
-			refreshed, err2 := ds.tryRefresh(err)
-			if err2 != nil {
-				// failed to reset snowflake driver
-				return err2
-			}
-			if refreshed {
-				if f, err3 := ds.sf.Put(ctx, dataset, entityContext, entities); err3 != nil {
-					if err3 != nil {
-						return err3 // give up at this point
-					}
-				} else {
-					files = append(files, f...)
-				}
-
-			} else {
-				return err
-			}
-		} else {
-			files = append(files, f...)
-		}
+		read, entities, files, err = ds.safeEnsureStageAndPut(ctx, dataset, entityContext, entities, files)
 	}
 	if len(files) > 0 {
 
@@ -121,6 +155,52 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 	}
 
 	return nil
+}
+
+func (ds *Dataset) safePut(dataset string, stage string, entityContext *uda.Context, entities []*Entity) error {
+	if _, err := ds.sf.putEntities(dataset, stage, entities, entityContext); err != nil {
+		refreshed, err2 := ds.tryRefresh(err)
+		if err2 != nil {
+			// failed to reset snowflake driver
+			return err2
+		}
+		if refreshed {
+			if _, err3 := ds.sf.putEntities(dataset, stage, entities, entityContext); err3 != nil {
+				if err3 != nil {
+					return err3 // give up at this point
+				}
+			}
+
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+func (ds *Dataset) safeEnsureStageAndPut(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity, files []string) (int64, []*Entity, []string, error) {
+	if f, err := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err != nil {
+		refreshed, err2 := ds.tryRefresh(err)
+		if err2 != nil {
+			// failed to reset snowflake driver
+			return 0, nil, nil, err2
+		}
+		if refreshed {
+			if f, err3 := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err3 != nil {
+				if err3 != nil {
+					return 0, nil, nil, err3 // give up at this point
+				}
+			} else {
+				files = append(files, f...)
+			}
+
+		} else {
+			return 0, nil, nil, err
+		}
+	} else {
+		files = append(files, f...)
+	}
+	entities = make([]*Entity, 0)
+	return 0, entities, files, nil
 }
 
 func (ds *Dataset) tryRefresh(err error) (bool, error) {
