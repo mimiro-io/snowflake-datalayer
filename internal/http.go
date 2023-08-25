@@ -84,7 +84,10 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 		LOG.Info().Msg("Enabling certificate security")
 	}
 
-	g.POST("/:dataset/changes", handler.changes)
+	//keep support for POST to /changes for transition period.
+	g.POST("/:dataset/changes", handler.postEntities)
+	// /entities is the correct UDA endpoint, https://open.mimiro.io/specifications/uda/latest.html#post
+	g.POST("/:dataset/entities", handler.postEntities)
 
 	return e, nil
 }
@@ -105,15 +108,57 @@ func newHandler(cfg Config) (*handler, error) {
 	}, nil
 }
 
-func (h *handler) changes(c echo.Context) error {
-	dataset := c.Param("dataset")
+const (
+	FsStartHeader = "universal-data-api-full-sync-start" //  bool
+	FsEndHeader   = "universal-data-api-full-sync-end"   //  bool
+	FsIdHeader    = "universal-data-api-full-sync-id"    // string
+)
+
+type dsInfo struct {
+	name    string
+	fsId    string
+	fsStart bool
+	fsEnd   bool
+}
+
+func (i dsInfo) IsFullSync() bool {
+	return i.fsId != ""
+}
+
+func (h *handler) postEntities(c echo.Context) error {
+	ds, err := extractDsInfo(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "recorded", time.Now().UnixNano())
-	err := h.ds.Write(ctx, dataset, c.Request().Body)
+	if ds.IsFullSync() {
+		err = h.ds.WriteFs(ctx, ds, c.Request().Body)
+	} else {
+		err = h.ds.Write(ctx, ds.name, c.Request().Body)
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.NoContent(200)
+}
+
+func extractDsInfo(c echo.Context) (dsInfo, error) {
+	dataset := c.Param("dataset")
+	res := dsInfo{
+		name:    dataset,
+		fsId:    c.Request().Header.Get(FsIdHeader),
+		fsStart: c.Request().Header.Get(FsStartHeader) == "true",
+		fsEnd:   c.Request().Header.Get(FsEndHeader) == "true",
+	}
+	if dataset == "" {
+		return dsInfo{}, fmt.Errorf("dataset not specified")
+	}
+	if (res.fsEnd || res.fsStart) && res.fsId == "" {
+		return dsInfo{}, fmt.Errorf("full sync id not specified")
+	}
+	return res, nil
 }
 
 func health(c echo.Context) error {
