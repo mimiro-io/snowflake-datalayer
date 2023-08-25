@@ -214,22 +214,22 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 
 		var existingFsStage string
 		rows.NextResultSet() // skip to 2nd statement result
-		rows.Next()
-		err = rows.Scan(&existingFsStage)
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				sf.log.Error().Err(err).Msg("Failed to scan row")
+		if rows.Next() {
+			err = rows.Scan(&existingFsStage)
+			if err != nil {
+				if !errors.Is(err, sql.ErrNoRows) {
+					sf.log.Error().Err(err).Msg("Failed to scan row")
+					return "", err
+				} else {
+					sf.log.Info().Msg("No previous full sync stage found for " + dsName)
+				}
+			}
+			sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
+			_, err = p.db.Exec(fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDb, sf.cfg.SnowflakeSchema, existingFsStage))
+			if err != nil {
 				return "", err
-			} else {
-				sf.log.Info().Msg("No previous full sync stage found for " + dsName)
 			}
 		}
-		sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
-		_, err = p.db.Exec(fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDb, sf.cfg.SnowflakeSchema, existingFsStage))
-		if err != nil {
-			return "", err
-		}
-
 		stage = stage + fsSuffix
 	}
 
@@ -346,11 +346,17 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 	sf.log.Trace().Msgf("Done with %s. now swapping with %s", loadTableName, tableName)
 	_, err = tx.Exec(fmt.Sprintf("ALTER TABLE %s SWAP WITH %s", loadTableName, tableName))
 	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(fmt.Sprintf("DROP TABLE %s", loadTableName))
-	if err != nil {
-		return err
+		// if swap fails, this could be the first full sync and tableName does not exist yet. so try rename
+		_, err = tx.Exec(fmt.Sprintf("ALTER TABLE %s RENAME TO %s", loadTableName, tableName))
+		if err != nil {
+			return err
+		}
+	} else {
+		// if swap was success, remove load table (which is now the old table)
+		_, err = tx.Exec(fmt.Sprintf("DROP TABLE %s", loadTableName))
+		if err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
