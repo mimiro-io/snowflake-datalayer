@@ -196,6 +196,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 		dsName)
 
 	if fsId != "" {
+		sf.log.Info().Msg("Full sync requested for " + dsName + ", id " + fsId)
 		fsSuffix := fmt.Sprintf("_FSID_%s", fsId)
 		query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + sf.cfg.SnowflakeDb + "." + sf.cfg.SnowflakeSchema
 		query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
@@ -225,10 +226,14 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 				}
 			}
 			sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
-			_, err = p.db.Exec(fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDb, sf.cfg.SnowflakeSchema, existingFsStage))
+			stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDb, sf.cfg.SnowflakeSchema, existingFsStage)
+			_, err = p.db.Exec(stmt)
 			if err != nil {
+				sf.log.Error().Err(err).Str("statement", stmt).Msg("Failed to drop previous full sync stage")
 				return "", err
 			}
+		} else {
+			sf.log.Info().Msg("No previous full sync stage found for " + dsName)
 		}
 		stage = stage + fsSuffix
 	}
@@ -241,6 +246,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 	sf.log.Trace().Msg(q)
 	_, err := p.db.Exec(q)
 	if err != nil {
+		sf.log.Error().Err(err).Str("statement", q).Msg("Failed to create stage")
 		return "", err
 	}
 	return stage, err

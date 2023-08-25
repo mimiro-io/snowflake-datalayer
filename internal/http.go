@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -151,6 +152,9 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 		fsId:    c.Request().Header.Get(FsIdHeader),
 		fsStart: c.Request().Header.Get(FsStartHeader) == "true",
 		fsEnd:   c.Request().Header.Get(FsEndHeader) == "true",
+	}
+	if res.fsId != "" {
+		res.fsId = strings.ReplaceAll(res.fsId, "-", "_")
 	}
 	if dataset == "" {
 		return dsInfo{}, fmt.Errorf("dataset not specified")
