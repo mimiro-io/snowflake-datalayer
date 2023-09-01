@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
 )
 
 func NewServer(cfg Config) (*echo.Echo, error) {
@@ -77,6 +80,7 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 		return nil, err
 	}
 	g.Use(DefaultLoggerFilter(cfg, m.Statsd))
+	g.Use(MemoryGuard(cfg))
 	if cfg.Authenticator == "jwt" {
 		LOG.Info().Msg("Enabling jwt security")
 		g.Use(DefaultJwtFilter(cfg))
@@ -91,6 +95,31 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 	g.POST("/:dataset/entities", handler.postEntities)
 
 	return e, nil
+}
+
+var defaultMemoryHeadroom = 500 * 1000 * 1000
+
+func MemoryGuard(conf Config) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			minHeadRoom := defaultMemoryHeadroom
+			if conf.MemoryHeadroom > 0 {
+				minHeadRoom = conf.MemoryHeadroom
+			}
+			mem := ReadMemoryStats()
+			if mem.Max > 0 {
+				headroom := int(mem.Max - mem.Current)
+				log.Debug().Msg(fmt.Sprintf("MemoryGuard: headroom: %v (min: %v)", headroom, minHeadRoom))
+				if headroom < minHeadRoom {
+					log.Info().Msg(fmt.Sprintf("MemoryGuard: headroom too low, rejecting request: %v", c.Request().URL))
+					return echo.NewHTTPError(http.StatusServiceUnavailable, "MemoryGuard: headroom too low, rejecting request")
+				}
+			} else {
+				log.Debug().Msg("MemoryGuard: no memory stats available")
+			}
+			return next(c)
+		}
+	}
 }
 
 type handler struct {
@@ -167,4 +196,39 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 
 func health(c echo.Context) error {
 	return c.String(http.StatusOK, "UP")
+}
+
+type Memory struct {
+	Current int64
+	Max     int64
+}
+
+// ReadMemoryStats reads the memory stats from the cgroup. Only works in docker, where docker setr the cgroup values.
+// Other environments return empty values.
+func ReadMemoryStats() Memory {
+	bytes, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return Memory{}
+	}
+	path := strings.TrimSpace(strings.ReplaceAll(string(bytes), "0::", "/sys/fs/cgroup"))
+	maxMem := path + "/memory.max"
+	bytes, err = os.ReadFile(maxMem)
+	if err != nil {
+		return Memory{}
+	}
+	max, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
+	if err != nil {
+		return Memory{}
+	}
+	curMem := path + "/memory.current"
+	bytes, err = os.ReadFile(curMem)
+	if err != nil {
+		return Memory{}
+	}
+	cur, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
+
+	return Memory{
+		Current: cur,
+		Max:     max,
+	}
 }

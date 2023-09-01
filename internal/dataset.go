@@ -34,8 +34,16 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 		var err error
 		stage, err = ds.sf.mkStage(info.fsId, info.name)
 		if err != nil {
-			ds.log.Error().Str("stage", stage).Msg("Failed to create stage")
-			return err
+			refreshed, err2 := ds.tryRefresh(err)
+			if err2 != nil {
+				return err2
+			}
+			if refreshed {
+				stage, err = ds.sf.mkStage(info.fsId, info.name)
+			} else {
+				ds.log.Error().Str("stage", stage).Msg("Failed to create stage, even after login refresh")
+				return err
+			}
 		}
 		ds.log.Info().Str("stage", stage).Msg("Created stage")
 	} else {
