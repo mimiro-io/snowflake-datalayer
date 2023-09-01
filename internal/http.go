@@ -216,7 +216,7 @@ func ReadMemoryStats() Memory {
 	if err != nil {
 		return Memory{}
 	}
-	max, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
+	maxM, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
 	if err != nil {
 		return Memory{}
 	}
@@ -225,10 +225,13 @@ func ReadMemoryStats() Memory {
 	if err != nil {
 		return Memory{}
 	}
-	cur, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
+	curM, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
+	if err != nil {
+		return Memory{}
+	}
 
 	return Memory{
-		Current: cur,
-		Max:     max,
+		Current: curM,
+		Max:     maxM,
 	}
 }
