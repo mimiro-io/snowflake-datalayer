@@ -104,7 +104,7 @@ func MemoryGuard(conf Config) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			minHeadRoom := defaultMemoryHeadroom
 			if conf.MemoryHeadroom > 0 {
-				minHeadRoom = conf.MemoryHeadroom
+				minHeadRoom = conf.MemoryHeadroom * 1000 * 1000
 			}
 			mem := ReadMemoryStats()
 			if mem.Max > 0 {
@@ -117,6 +117,7 @@ func MemoryGuard(conf Config) echo.MiddlewareFunc {
 			} else {
 				log.Debug().Msg("MemoryGuard: no memory stats available")
 			}
+			
 			return next(c)
 		}
 	}
@@ -203,7 +204,7 @@ type Memory struct {
 	Max     int64
 }
 
-// ReadMemoryStats reads the memory stats from the cgroup. Only works in docker, where docker setr the cgroup values.
+// ReadMemoryStats reads the memory stats from cgroup. Only works in docker, where docker sets cgroup values.
 // Other environments return empty values.
 func ReadMemoryStats() Memory {
 	bytes, err := os.ReadFile("/proc/self/cgroup")
