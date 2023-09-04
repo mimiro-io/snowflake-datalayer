@@ -8,9 +8,6 @@ RUN apk update && apk add --no-cache git gcc musl-dev ca-certificates tzdata && 
 # Set the Current Working Directory inside the container
 WORKDIR /app
 
-# Copy the source from the current directory to the Working Directory inside the container
-COPY . .
-
 # Copy go mod and sum files
 COPY go.mod go.sum ./
 
@@ -19,6 +16,8 @@ RUN go mod download
 
 FROM build_env as builder
 
+# Copy the source from the current directory to the Working Directory inside the container
+COPY . .
 # Build the Go app
 RUN go vet ./...
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o flake cmd/flake/main.go

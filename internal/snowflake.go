@@ -246,7 +246,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 	sf.log.Trace().Msg(q)
 	_, err := p.db.Exec(q)
 	if err != nil {
-		sf.log.Error().Err(err).Str("statement", q).Msg("Failed to create stage")
+		sf.log.Warn().Msg("Failed to create/ensure stage")
 		return "", err
 	}
 	return stage, err

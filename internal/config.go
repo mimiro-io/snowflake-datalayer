@@ -29,6 +29,7 @@ type Config struct {
 	TokenAudience      string
 	NodePublicKey      string
 	Authenticator      string
+	MemoryHeadroom     int
 }
 
 func (c *Config) common() *flag.FlagSet {
@@ -58,6 +59,7 @@ func (c *Config) Flags() *flag.FlagSet {
 func (c *Config) ServerFlags() *flag.FlagSet {
 	fs := c.common()
 	fs.IntVar(&c.Port, "port", 8080, "http server port")
+	fs.IntVar(&c.MemoryHeadroom, "memory-headroom", 0, "http server port")
 	fs.StringVar(&c.JwtWellKnown, "well-known", "", "url to well-known.json endpoint")
 	fs.StringVar(&c.TokenIssuer, "issuer", "", "either a jwt issuer or a node:<id> issuer if public key is set")
 	fs.StringVar(&c.TokenAudience, "audience", "", "either a jwt audience or a node:<id> audience if public key is set")
@@ -81,6 +83,7 @@ func (c *Config) LoadEnv() error {
 		"SnowflakeSchema:SNOWFLAKE_SCHEMA",
 		"SnowflakeUri:SNOWFLAKE_CONNECTION_STRING",
 		"Port:PORT",
+		"MemoryHeadroom:MEMORY_HEADROOM",
 		"JwtWellKnown:WELL_KNOWN",
 		"TokenIssuer:ISSUER",
 		"TokenAudience:AUDIENCE",
