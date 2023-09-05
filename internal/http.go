@@ -89,7 +89,7 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 		LOG.Info().Msg("Enabling certificate security")
 	}
 
-	//keep support for POST to /changes for transition period.
+	// keep support for POST to /changes for transition period.
 	g.POST("/:dataset/changes", handler.postEntities)
 	// /entities is the correct UDA endpoint, https://open.mimiro.io/specifications/uda/latest.html#post
 	g.POST("/:dataset/entities", handler.postEntities)
@@ -215,7 +215,11 @@ func ReadMemoryStats() Memory {
 	maxMem := path + "/memory.max"
 	bytes, err = os.ReadFile(maxMem)
 	if err != nil {
-		return Memory{}
+		// fallback to
+		bytes, err = os.ReadFile("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+		if err != nil {
+			return Memory{}
+		}
 	}
 	maxM, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
 	if err != nil {
@@ -224,7 +228,10 @@ func ReadMemoryStats() Memory {
 	curMem := path + "/memory.current"
 	bytes, err = os.ReadFile(curMem)
 	if err != nil {
-		return Memory{}
+		bytes, err = os.ReadFile("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+		if err != nil {
+			return Memory{}
+		}
 	}
 	curM, err := strconv.ParseInt(strings.TrimSpace(string(bytes)), 10, 64)
 	if err != nil {
