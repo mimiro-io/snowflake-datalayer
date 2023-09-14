@@ -18,6 +18,3 @@ indent_style = tab
 
 [Makefile]
 indent_style = tab
-
-[*.pem]
-insert_final_newline = false

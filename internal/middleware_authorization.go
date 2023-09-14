@@ -1,11 +1,12 @@
 package internal
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/juliangruber/go-intersect"
 	"github.com/labstack/echo/v4"
-	"net/http"
-	"strings"
 )
 
 func JwtAuthorizer(scopes ...string) echo.MiddlewareFunc {

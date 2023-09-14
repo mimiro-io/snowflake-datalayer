@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -12,14 +13,14 @@ import (
 )
 
 type Dataset struct {
-	cfg  Config
+	cfg  *Config
 	log  zerolog.Logger
 	sf   *Snowflake
 	lock sync.Mutex
 	//m    statsd.ClientInterface
 }
 
-func NewDataset(cfg Config, sf *Snowflake) *Dataset {
+func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
 	return &Dataset{
 		cfg: cfg,
 		log: LOG.With().Str("logger", "dataset").Logger(),
@@ -110,9 +111,6 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 
 func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) error {
 	var batchSize int64 = 50000
-	if s, ok := ctx.Value("batchSize").(int64); ok {
-		batchSize = s
-	}
 
 	isFirst := true
 	var read int64 = 0
@@ -227,4 +225,48 @@ func (ds *Dataset) tryRefresh(err error) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo) error {
+	mapping, err := ds.cfg.Mapping(dsInfo.name)
+	if err != nil {
+		LOG.Info().Msg("Failed to get mapping for dataset " + dsInfo.name + ". Trying implicit mapping.")
+		var err2 error
+		mapping, err2 = implicitMapping(dsInfo.name)
+		if err2 != nil {
+			LOG.Error().Err(err2).Msg("Failed to get implicit mapping for dataset " + dsInfo.name + ".")
+			return fmt.Errorf("no table mapping: %w, %w", err, err2)
+		}
+	}
+	if err = ds.sf.ReadAll(ctx, writer, dsInfo, mapping); err != nil {
+		refreshed, err2 := ds.tryRefresh(err)
+		if err2 != nil {
+			return err2
+		}
+		if refreshed {
+			return ds.sf.ReadAll(ctx, writer, dsInfo, mapping)
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+// if there is no read config for the given dataset name, make an attempt
+// to interpret the dataset name string as table spec.
+func implicitMapping(name string) (DatasetDefinition, error) {
+	tokens := strings.Split(name, ".")
+	if len(tokens) == 3 {
+		return DatasetDefinition{
+			DatasetName: name,
+			SourceConfiguration: SourceConfiguration{
+				TableName: tokens[2],
+				Schema:    tokens[1],
+				Database:  tokens[0],
+				RawColumn: "ENTITY",
+			},
+			Mappings: nil,
+		}, nil
+	}
+	return DatasetDefinition{}, fmt.Errorf("%w %s. expected database.schema.table format", ErrNoImplicitDataset, name)
 }

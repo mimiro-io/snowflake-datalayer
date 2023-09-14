@@ -3,6 +3,7 @@ package internal
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"reflect"
 	"strconv"
@@ -10,26 +11,33 @@ import (
 )
 
 type Config struct {
-	LogType            string
-	LogLevel           string
-	ServiceName        string
-	File               string
-	PrivateCert        string
-	CertPassword       string
-	SnowflakeUser      string
-	SnowflakePassword  string
-	SnowflakeAccount   string
-	SnowflakeDb        string
-	SnowflakeSchema    string
-	SnowflakeWarehouse string
-	SnowflakeUri       string
-	Port               int
-	JwtWellKnown       string
-	TokenIssuer        string
-	TokenAudience      string
-	NodePublicKey      string
-	Authenticator      string
-	MemoryHeadroom     int
+	LogType             string
+	LogLevel            string
+	ServiceName         string
+	PrivateCert         string //deprecated
+	SnowflakeUser       string
+	SnowflakePassword   string
+	SnowflakeAccount    string
+	SnowflakeDb         string
+	SnowflakeSchema     string
+	SnowflakeWarehouse  string
+	SnowflakeUri        string
+	SnowflakePrivateKey string
+	Port                int
+	JwtWellKnown        string
+	TokenIssuer         string
+	TokenAudience       string
+	//NodePublicKey            string
+	Authenticator            string
+	MemoryHeadroom           int
+	DsMappings               []DatasetDefinition
+	ConfigLocation           string
+	ConfigLoaderInterval     int
+	ConfigLoaderClientId     string
+	ConfigLoaderClientSecret string
+	ConfigLoaderAudience     string
+	ConfigLoaderGrantType    string
+	ConfigLoaderAuthEndpoint string
 }
 
 func (c *Config) common() *flag.FlagSet {
@@ -37,7 +45,6 @@ func (c *Config) common() *flag.FlagSet {
 	fs.StringVar(&c.LogType, "log-type", "console", "Determines log type. Valid are console or json.")
 	fs.StringVar(&c.LogLevel, "log-level", "info", "Log level. error, warn, trace, debug or info.")
 	fs.StringVar(&c.ServiceName, "service", "datahub-snowflake-datalayer", "Override service name. For logging purposes.")
-	fs.StringVar(&c.File, "file", "", "uda dataset to load")
 	fs.StringVar(&c.SnowflakeUser, "snowflake-user", "", "Snowflake username. Required.")
 	fs.StringVar(&c.SnowflakePassword, "snowflake-password", "", "Snowflake password. Required.")
 	fs.StringVar(&c.SnowflakeAccount, "snowflake-account", "", "Snowflake account to use.")
@@ -45,8 +52,15 @@ func (c *Config) common() *flag.FlagSet {
 	fs.StringVar(&c.SnowflakeSchema, "snowflake-schema", "", "Snowflake schema if set.")
 	fs.StringVar(&c.SnowflakeWarehouse, "snowflake-warehouse", "", "Snowflake warehouse")
 	fs.StringVar(&c.SnowflakeUri, "snowflake-connection-string", "", "Alternative if more parameters are needed.")
-	fs.StringVar(&c.PrivateCert, "private-cert", "", "Base64 encoded private cert")
-	fs.StringVar(&c.CertPassword, "cert-password", "", "Password to unlock private cert (can be empty if cert is not encrypted)")
+	fs.StringVar(&c.SnowflakePrivateKey, "snowflake-private-key", "", "base64 encoded private key.")
+	fs.StringVar(&c.PrivateCert, "private-cert", "", "deprecated, use snowflake-private-key.")
+	fs.IntVar(&c.ConfigLoaderInterval, "config-loader-interval", 60, "Interval in seconds to reload config file")
+	fs.StringVar(&c.ConfigLocation, "config-location", "", "Location of config file. file:// or http://")
+	fs.StringVar(&c.ConfigLoaderClientId, "config-loader-client-id", "", "Client id for config loader")
+	fs.StringVar(&c.ConfigLoaderClientSecret, "config-loader-client-secret", "", "Client secret for config loader")
+	fs.StringVar(&c.ConfigLoaderAudience, "config-loader-audience", "", "Audience for config loader")
+	fs.StringVar(&c.ConfigLoaderGrantType, "config-loader-grant-type", "", "Grant type for config loader")
+	fs.StringVar(&c.ConfigLoaderAuthEndpoint, "config-loader-auth-endpoint", "", "Auth endpoint for config loader")
 
 	return fs
 }
@@ -63,7 +77,7 @@ func (c *Config) ServerFlags() *flag.FlagSet {
 	fs.StringVar(&c.JwtWellKnown, "well-known", "", "url to well-known.json endpoint")
 	fs.StringVar(&c.TokenIssuer, "issuer", "", "either a jwt issuer or a node:<id> issuer if public key is set")
 	fs.StringVar(&c.TokenAudience, "audience", "", "either a jwt audience or a node:<id> audience if public key is set")
-	fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
+	//fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
 	fs.StringVar(&c.Authenticator, "authenticator", "jwt", "middleware for authentication. 'noop' disables auth, jwt enables it")
 	return fs
 }
@@ -75,22 +89,28 @@ func (c *Config) LoadEnv() error {
 		"LogType:LOG_TYPE",
 		"LogLevel:LOG_LEVEL",
 		"ServiceName:SERVICE_NAME",
-		"File:FILE",
 		"SnowflakeUser:SNOWFLAKE_USER",
 		"SnowflakePassword:SNOWFLAKE_PASSWORD",
 		"SnowflakeAccount:SNOWFLAKE_ACCOUNT",
 		"SnowflakeDb:SNOWFLAKE_DB",
 		"SnowflakeSchema:SNOWFLAKE_SCHEMA",
 		"SnowflakeUri:SNOWFLAKE_CONNECTION_STRING",
+		"SnowflakePrivateKey:SNOWFLAKE_PRIVATE_KEY",
 		"Port:PORT",
 		"MemoryHeadroom:MEMORY_HEADROOM",
 		"JwtWellKnown:WELL_KNOWN",
 		"TokenIssuer:ISSUER",
 		"TokenAudience:AUDIENCE",
-		"NodePublicKey:NODE_PUBLIC_KEY",
+		//"NodePublicKey:NODE_PUBLIC_KEY",
 		"Authenticator:AUTHENTICATOR",
 		"PrivateCert:PRIVATE_CERT",
-		"CertPassword:CERT_PASSWORD",
+		"ConfigLocation:CONFIG_LOCATION",
+		"ConfigLoaderInterval:CONFIG_LOADER_INTERVAL",
+		"ConfigLoaderClientId:CONFIG_LOADER_CLIENT_ID",
+		"ConfigLoaderClientSecret:CONFIG_LOADER_CLIENT_SECRET",
+		"ConfigLoaderAudience:CONFIG_LOADER_AUDIENCE",
+		"ConfigLoaderGrantType:CONFIG_LOADER_GRANT_TYPE",
+		"ConfigLoaderAuthEndpoint:CONFIG_LOADER_AUTH_ENDPOINT",
 	}
 	o := reflect.ValueOf(c).Elem()
 	for _, item := range elems {
@@ -106,7 +126,6 @@ func (c *Config) LoadEnv() error {
 			} else {
 				field.Set(reflect.ValueOf(v))
 			}
-
 		}
 	}
 	return nil
@@ -125,4 +144,13 @@ func (c *Config) Validate() error {
 	//	return errors.New("you must either provide both a snowflake uri and user/password")
 	//}
 	return nil
+}
+
+func (c *Config) Mapping(name string) (DatasetDefinition, error) {
+	for _, mapping := range c.DsMappings {
+		if mapping.DatasetName == name {
+			return mapping, nil
+		}
+	}
+	return DatasetDefinition{}, fmt.Errorf("mapping %s not found", name)
 }

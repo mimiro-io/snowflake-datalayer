@@ -10,62 +10,20 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/rs/zerolog/log"
 )
 
-func NewServer(cfg Config) (*echo.Echo, error) {
+type Server struct {
+	cfg     *Config
+	E       *echo.Echo
+	handler *handler
+}
+
+func NewServer(cfg *Config) (*Server, error) {
 	e := echo.New()
 	e.HideBanner = true
 	e.Debug = false
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		LOG.Error().Err(fmt.Errorf("request failed: %w", err)).Msg(err.Error())
 
-		if c.Response().Committed {
-			return
-		}
-
-		he, ok := err.(*echo.HTTPError)
-		if ok {
-			if he.Internal != nil {
-				if herr, ok := he.Internal.(*echo.HTTPError); ok {
-					he = herr
-				}
-			}
-		} else {
-			he = &echo.HTTPError{
-				Code:    http.StatusInternalServerError,
-				Message: http.StatusText(http.StatusInternalServerError),
-			}
-		}
-
-		// Issue #1426
-		code := he.Code
-		message := he.Message
-		if m, ok := he.Message.(string); ok {
-			if e.Debug {
-				message = echo.Map{"message": m, "error": err.Error()}
-			} else {
-				message = echo.Map{"message": m}
-			}
-		} else {
-			// if not a string, convert it
-			if e.Debug {
-				message = echo.Map{"message": fmt.Sprintf("%v", err), "error": err.Error()}
-			}
-		}
-
-		// Send response
-		if c.Request().Method == http.MethodHead { // Issue #608
-			err = c.NoContent(he.Code)
-		} else {
-			err = c.JSON(code, message)
-		}
-		if err != nil {
-			LOG.Error().Err(err).Msg(err.Error())
-		}
-	}
-
-	handler, err := newHandler(cfg)
+	h, err := newHandler(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +37,19 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 	if err != nil {
 		return nil, err
 	}
-	g.Use(DefaultLoggerFilter(cfg, m.Statsd))
-	g.Use(MemoryGuard(cfg))
+	g.Use(DefaultLoggerFilter(m.Statsd))
+	g.Use(memoryGuard(cfg))
+	g.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			err := next(c)
+			if err == nil {
+				return err
+			}
+
+			LOG.Error().Err(err).Msg("request failed")
+			return ToHttpError(err)
+		}
+	})
 	if cfg.Authenticator == "jwt" {
 		LOG.Info().Msg("Enabling jwt security")
 		g.Use(DefaultJwtFilter(cfg))
@@ -88,36 +57,38 @@ func NewServer(cfg Config) (*echo.Echo, error) {
 	} else if cfg.Authenticator == "local" {
 		LOG.Info().Msg("Enabling certificate security")
 	}
-
-	// keep support for POST to /changes for transition period.
-	g.POST("/:dataset/changes", handler.postEntities)
 	// /entities is the correct UDA endpoint, https://open.mimiro.io/specifications/uda/latest.html#post
-	g.POST("/:dataset/entities", handler.postEntities)
+	g.POST("/:dataset/entities", h.postEntities)
 
-	return e, nil
+	g.GET("/:dataset/entities", h.getEntities)
+	return &Server{
+		cfg:     cfg,
+		E:       e,
+		handler: h,
+	}, nil
 }
 
 var defaultMemoryHeadroom = 500 * 1000 * 1000
 
-func MemoryGuard(conf Config) echo.MiddlewareFunc {
+func memoryGuard(conf *Config) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			minHeadRoom := defaultMemoryHeadroom
 			if conf.MemoryHeadroom > 0 {
 				minHeadRoom = conf.MemoryHeadroom * 1000 * 1000
 			}
-			mem := ReadMemoryStats()
+			mem := readMemoryStats()
 			if mem.Max > 0 {
 				headroom := int(mem.Max - mem.Current)
-				log.Debug().Msg(fmt.Sprintf("MemoryGuard: headroom: %v (min: %v)", headroom, minHeadRoom))
+				LOG.Debug().Msg(fmt.Sprintf("MemoryGuard: headroom: %v (min: %v)", headroom, minHeadRoom))
 				if headroom < minHeadRoom {
-					log.Info().Msg(fmt.Sprintf("MemoryGuard: headroom too low, rejecting request: %v", c.Request().URL))
+					LOG.Info().Msg(fmt.Sprintf("MemoryGuard: headroom too low, rejecting request: %v", c.Request().URL))
 					return echo.NewHTTPError(http.StatusServiceUnavailable, "MemoryGuard: headroom too low, rejecting request")
 				}
 			} else {
-				log.Debug().Msg("MemoryGuard: no memory stats available")
+				LOG.Debug().Msg("MemoryGuard: no memory stats available")
 			}
-			
+
 			return next(c)
 		}
 	}
@@ -127,7 +98,7 @@ type handler struct {
 	ds *Dataset
 }
 
-func newHandler(cfg Config) (*handler, error) {
+func newHandler(cfg *Config) (*handler, error) {
 	sf, err := NewSnowflake(cfg)
 	if err != nil {
 		return nil, err
@@ -150,6 +121,8 @@ type dsInfo struct {
 	fsId    string
 	fsStart bool
 	fsEnd   bool
+	limit   int
+	since   string
 }
 
 func (i dsInfo) IsFullSync() bool {
@@ -175,6 +148,14 @@ func (h *handler) postEntities(c echo.Context) error {
 	return c.NoContent(200)
 }
 
+func (h *handler) getEntities(c echo.Context) error {
+	ds, err := extractDsInfo(c)
+	if err != nil {
+		return err
+	}
+	return h.ds.ReadAll(c.Request().Context(), c.Response(), ds)
+}
+
 func extractDsInfo(c echo.Context) (dsInfo, error) {
 	dataset := c.Param("dataset")
 	res := dsInfo{
@@ -182,6 +163,23 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 		fsId:    c.Request().Header.Get(FsIdHeader),
 		fsStart: c.Request().Header.Get(FsStartHeader) == "true",
 		fsEnd:   c.Request().Header.Get(FsEndHeader) == "true",
+		limit:   0,
+		since:   "",
+	}
+	if c.QueryParam("since") != "" {
+		return dsInfo{}, fmt.Errorf("limit not supported yet")
+		//res.since = c.QueryParam("since")
+	}
+	if c.QueryParam("limit") != "" {
+		limit, err := strconv.Atoi(c.QueryParam("limit"))
+		if err != nil {
+			return dsInfo{}, fmt.Errorf("limit is not a number")
+		}
+		if limit < 0 {
+			return dsInfo{}, fmt.Errorf("limit is negative")
+		}
+		return dsInfo{}, fmt.Errorf("limit not supported yet")
+		//res.limit = limit
 	}
 	if res.fsId != "" {
 		res.fsId = strings.ReplaceAll(res.fsId, "-", "_")
@@ -204,9 +202,9 @@ type Memory struct {
 	Max     int64
 }
 
-// ReadMemoryStats reads the memory stats from cgroup. Only works in docker, where docker sets cgroup values.
+// readMemoryStats reads the memory stats from cgroup. Only works in docker, where docker sets cgroup values.
 // Other environments return empty values.
-func ReadMemoryStats() Memory {
+func readMemoryStats() Memory {
 	bytes, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		return Memory{}
