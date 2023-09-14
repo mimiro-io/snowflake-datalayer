@@ -143,14 +143,14 @@ func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser
 	return dsMappingConfig.DatasetDefinitions, nil
 }
 
-type authResponse struct {
+type cnfAuthResponse struct {
 	AccessToken string `json:"access_token"`
 	Scope       string `json:"scope"`
 	ExpiresIn   int64  `json:"expires_in"`
 	TokenType   string `json:"token_type"`
 }
 
-func (c *ConfigLoader) fetchNewConfigToken(clientId, clientSecret, audience, grantType, endpoint string) (*authResponse, error) {
+func (c *ConfigLoader) fetchNewConfigToken(clientId, clientSecret, audience, grantType, endpoint string) (*cnfAuthResponse, error) {
 	requestBody, err := json.Marshal(map[string]string{
 		"client_id":     clientId,
 		"client_secret": clientSecret,
@@ -182,10 +182,10 @@ func (c *ConfigLoader) fetchNewConfigToken(clientId, clientSecret, audience, gra
 		return nil, fmt.Errorf("not authorized. status=%v, err=%v", res.Status, string(b))
 	}
 
-	auth0Response := &authResponse{}
-	err = json.NewDecoder(res.Body).Decode(auth0Response)
+	response := &cnfAuthResponse{}
+	err = json.NewDecoder(res.Body).Decode(response)
 	if err != nil {
 		return nil, err
 	}
-	return auth0Response, nil
+	return response, nil
 }

@@ -38,7 +38,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		return nil, err
 	}
 	g.Use(DefaultLoggerFilter(m.Statsd))
-	g.Use(MemoryGuard(cfg))
+	g.Use(memoryGuard(cfg))
 	g.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			err := next(c)
@@ -70,7 +70,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 var defaultMemoryHeadroom = 500 * 1000 * 1000
 
-func MemoryGuard(conf *Config) echo.MiddlewareFunc {
+func memoryGuard(conf *Config) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			minHeadRoom := defaultMemoryHeadroom
@@ -151,7 +151,7 @@ func (h *handler) postEntities(c echo.Context) error {
 func (h *handler) getEntities(c echo.Context) error {
 	ds, err := extractDsInfo(c)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return err
 	}
 	return h.ds.ReadAll(c.Request().Context(), c.Response(), ds)
 }
