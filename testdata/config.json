@@ -3,10 +3,12 @@
     {
       "dataset_name": "huzzah",
       "source_configuration": {
-        "table_name": "huzzah",
-        "schema_name": "datahub",
-        "database_name": "raw",
-        "default_type": "http://data.mimiro.io/Enthusiasm"
+        "table_name": "ns_huzzah",
+        "schema": "datahub",
+        "database": "raw",
+        "raw_column": "DB_ENTITY",
+        "default_type": "http://data.mimiro.io/Enthusiasm",
+        "map_all": true
       }
     }
   ]

@@ -12,12 +12,12 @@ type EntityPropertyMapping struct {
 }
 
 type SourceConfiguration struct {
-	TableName string `json:"table_name"`
-	Schema    string `json:"schema"`
-	Database  string `json:"database"`
-	RawColumn string `json:"raw_column"`
-	Query     string `json:"query"`
-	MapAll    bool   `json:"map_all"`
+	TableName   string `json:"table_name"`
+	Schema      string `json:"schema"`
+	Database    string `json:"database"`
+	RawColumn   string `json:"raw_column"`
+	MapAll      bool   `json:"map_all"`
+	DefaultType string `json:"default_type"`
 }
 
 type DatasetDefinition struct {

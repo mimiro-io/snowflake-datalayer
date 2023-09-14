@@ -4,8 +4,9 @@
       "dataset_name": "huzzah",
       "source_configuration": {
         "table_name": "huzzah",
-        "schema_name": "datahub",
-        "database_name": "default",
+        "schema": "datahub",
+        "database": "default",
+        "raw_column": "DB_ENTITY",
         "default_type": "http://data.mimiro.io/Enthusiasm"
       }
     },
@@ -15,6 +16,7 @@
         "table_name": "hooray",
         "schema_name": "datahub",
         "database_name": "default",
+        "raw_column": "raw",
         "default_type": "http://data.mimiro.io/Enthusiasm"
       }
     }

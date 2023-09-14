@@ -11,24 +11,23 @@ import (
 )
 
 type Config struct {
-	LogType                  string
-	LogLevel                 string
-	ServiceName              string
-	File                     string
-	PrivateCert              string //deprecated
-	SnowflakeUser            string
-	SnowflakePassword        string
-	SnowflakeAccount         string
-	SnowflakeDb              string
-	SnowflakeSchema          string
-	SnowflakeWarehouse       string
-	SnowflakeUri             string
-	SnowflakePrivateKey      string
-	Port                     int
-	JwtWellKnown             string
-	TokenIssuer              string
-	TokenAudience            string
-	NodePublicKey            string
+	LogType             string
+	LogLevel            string
+	ServiceName         string
+	PrivateCert         string //deprecated
+	SnowflakeUser       string
+	SnowflakePassword   string
+	SnowflakeAccount    string
+	SnowflakeDb         string
+	SnowflakeSchema     string
+	SnowflakeWarehouse  string
+	SnowflakeUri        string
+	SnowflakePrivateKey string
+	Port                int
+	JwtWellKnown        string
+	TokenIssuer         string
+	TokenAudience       string
+	//NodePublicKey            string
 	Authenticator            string
 	MemoryHeadroom           int
 	DsMappings               []DatasetDefinition
@@ -46,7 +45,6 @@ func (c *Config) common() *flag.FlagSet {
 	fs.StringVar(&c.LogType, "log-type", "console", "Determines log type. Valid are console or json.")
 	fs.StringVar(&c.LogLevel, "log-level", "info", "Log level. error, warn, trace, debug or info.")
 	fs.StringVar(&c.ServiceName, "service", "datahub-snowflake-datalayer", "Override service name. For logging purposes.")
-	fs.StringVar(&c.File, "file", "", "uda dataset to load")
 	fs.StringVar(&c.SnowflakeUser, "snowflake-user", "", "Snowflake username. Required.")
 	fs.StringVar(&c.SnowflakePassword, "snowflake-password", "", "Snowflake password. Required.")
 	fs.StringVar(&c.SnowflakeAccount, "snowflake-account", "", "Snowflake account to use.")
@@ -79,7 +77,7 @@ func (c *Config) ServerFlags() *flag.FlagSet {
 	fs.StringVar(&c.JwtWellKnown, "well-known", "", "url to well-known.json endpoint")
 	fs.StringVar(&c.TokenIssuer, "issuer", "", "either a jwt issuer or a node:<id> issuer if public key is set")
 	fs.StringVar(&c.TokenAudience, "audience", "", "either a jwt audience or a node:<id> audience if public key is set")
-	fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
+	//fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
 	fs.StringVar(&c.Authenticator, "authenticator", "jwt", "middleware for authentication. 'noop' disables auth, jwt enables it")
 	return fs
 }
@@ -91,7 +89,6 @@ func (c *Config) LoadEnv() error {
 		"LogType:LOG_TYPE",
 		"LogLevel:LOG_LEVEL",
 		"ServiceName:SERVICE_NAME",
-		"File:FILE",
 		"SnowflakeUser:SNOWFLAKE_USER",
 		"SnowflakePassword:SNOWFLAKE_PASSWORD",
 		"SnowflakeAccount:SNOWFLAKE_ACCOUNT",
@@ -104,7 +101,7 @@ func (c *Config) LoadEnv() error {
 		"JwtWellKnown:WELL_KNOWN",
 		"TokenIssuer:ISSUER",
 		"TokenAudience:AUDIENCE",
-		"NodePublicKey:NODE_PUBLIC_KEY",
+		//"NodePublicKey:NODE_PUBLIC_KEY",
 		"Authenticator:AUTHENTICATOR",
 		"PrivateCert:PRIVATE_CERT",
 		"ConfigLocation:CONFIG_LOCATION",

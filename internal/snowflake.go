@@ -404,8 +404,10 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 	var headerWritten bool
 	for rows.Next() {
 		if !headerWritten {
-			_, err = fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {"_": "http://snowflake/%s/%s/%s"}}`,
-				mapping.SourceConfiguration.Database, mapping.SourceConfiguration.Schema, mapping.SourceConfiguration.TableName)
+			_, err = fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {
+"_": "http://snowflake/%s/%s/%s",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}}`, mapping.SourceConfiguration.Database, mapping.SourceConfiguration.Schema, mapping.SourceConfiguration.TableName)
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to write context")
 				return err

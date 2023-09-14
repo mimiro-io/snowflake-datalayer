@@ -168,7 +168,7 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 	}
 	if c.QueryParam("since") != "" {
 		return dsInfo{}, fmt.Errorf("limit not supported yet")
-		res.since = c.QueryParam("since")
+		//res.since = c.QueryParam("since")
 	}
 	if c.QueryParam("limit") != "" {
 		limit, err := strconv.Atoi(c.QueryParam("limit"))
@@ -179,7 +179,7 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 			return dsInfo{}, fmt.Errorf("limit is negative")
 		}
 		return dsInfo{}, fmt.Errorf("limit not supported yet")
-		res.limit = limit
+		//res.limit = limit
 	}
 	if res.fsId != "" {
 		res.fsId = strings.ReplaceAll(res.fsId, "-", "_")

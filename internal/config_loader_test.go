@@ -1,36 +1,46 @@
 package internal
 
-import "testing"
+import (
+	. "github.com/onsi/ginkgo/v2"
 
-func TestLoadConfig(t *testing.T) {
-	c := &ConfigLoader{}
-	//LoadLogger("console", "test", "debug")
-	c.loadConfig = c.loadFile
-	cfg := &Config{ConfigLocation: "../testdata/config.json"}
-	res := c.update(cfg)
-	if !res {
-		t.Fatal("Expected config to be updated")
-	}
-	if len(cfg.DsMappings) != 1 {
-		t.Fatal("Expected 1 mapping")
-	}
-	res = c.update(cfg)
-	if res {
-		t.Fatal("Expected config to be unchanged")
-	}
-	if len(cfg.DsMappings) != 1 {
-		t.Fatal("Still expected 1 mapping")
-	}
-	if cfg.DsMappings[0].DatasetName != "huzzah" {
-		t.Fatal("Expected name to be test")
-	}
+	. "github.com/onsi/gomega"
+)
 
-	cfg.ConfigLocation = "../testdata/config2.json"
-	res = c.update(cfg)
-	if !res {
-		t.Fatal("Expected config to be updated")
-	}
-	if len(cfg.DsMappings) != 2 {
-		t.Fatal("Expected 2 mappings")
-	}
-}
+var _ = Describe("The config loader", func() {
+	It("should load config", func() {
+		c := &ConfigLoader{}
+		//LoadLogger("console", "test", "debug")
+		c.loadConfig = c.loadFile
+		cfg := &Config{ConfigLocation: "../testdata/config.json"}
+		res := c.update(cfg)
+		Expect(res).To(BeTrue(), "config should have been updated after first load")
+		Expect(len(cfg.DsMappings)).To(Equal(1), "should have 1 mapping")
+		res = c.update(cfg)
+		Expect(res).To(BeFalse(), "config should not have been updated after second load without change")
+		Expect(len(cfg.DsMappings)).To(Equal(1), "should still have 1 mapping")
+		Expect(cfg.DsMappings[0].DatasetName).To(Equal("huzzah"), "should have name huzzah")
+
+		cfg.ConfigLocation = "../testdata/config2.json"
+		res = c.update(cfg)
+		Expect(res).To(BeTrue(), "config should have been updated after this load since file is changed")
+		Expect(len(cfg.DsMappings)).To(Equal(2), "should have 2 mappings")
+	})
+
+	It("should map all fields correctly", func() {
+		c := &ConfigLoader{}
+		//LoadLogger("console", "test", "debug")
+		c.loadConfig = c.loadFile
+		cfg := &Config{ConfigLocation: "../testdata/config.json"}
+		res := c.update(cfg)
+		Expect(res).To(BeTrue(), "config should have been updated after first load")
+
+		Expect(len(cfg.DsMappings)).To(Equal(1), "should have 1 mapping")
+		Expect(cfg.DsMappings[0].DatasetName).To(Equal("huzzah"), "should have name huzzah")
+		Expect(cfg.DsMappings[0].SourceConfiguration.TableName).To(Equal("ns_huzzah"))
+		Expect(cfg.DsMappings[0].SourceConfiguration.Schema).To(Equal("datahub"))
+		Expect(cfg.DsMappings[0].SourceConfiguration.Database).To(Equal("raw"))
+		Expect(cfg.DsMappings[0].SourceConfiguration.RawColumn).To(Equal("DB_ENTITY"))
+		Expect(cfg.DsMappings[0].SourceConfiguration.MapAll).To(Equal(true))
+		Expect(cfg.DsMappings[0].SourceConfiguration.DefaultType).To(Equal("http://data.mimiro.io/Enthusiasm"))
+	})
+})

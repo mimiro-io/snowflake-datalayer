@@ -14,7 +14,7 @@ import (
 
 func TestHttp(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Web server Suite")
+	RunSpecs(t, "Snowflake Layer Suite")
 }
 
 var _ = Describe("The web server", func() {
@@ -23,7 +23,7 @@ var _ = Describe("The web server", func() {
 	var server *Server
 	var cfg *Config
 	BeforeEach(func() {
-		LoadLogger("console", "test", "debug")
+		//LoadLogger("console", "test", "debug")
 		var err error
 		db, mock, err = sqlmock.New() //WithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA")
 		Expect(err).NotTo(HaveOccurred())
@@ -56,7 +56,10 @@ var _ = Describe("The web server", func() {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
 			//GinkgoLogr.Info(string(bodyBytes))
-			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {"_": "http://snowflake/foo/bar/baz"}},
+			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
+"_": "http://snowflake/foo/bar/baz",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
 {"id": "1", "props": {"foo": "bar"}, "refs": {}},
 {"id": "2", "props": {"foo": "bar2"}, "refs":{}}]
 `))
@@ -117,7 +120,10 @@ var _ = Describe("The web server", func() {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
 			//GinkgoLogr.Info(string(bodyBytes))
-			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {"_": "http://snowflake/foo/bar/baz"}},
+			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
+"_": "http://snowflake/foo/bar/baz",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
 {"id": "1", "props": {"foo": "bar"}, "refs": {}},
 {"id": "2", "props": {"foo": "bar2"}, "refs":{}}]
 `))
