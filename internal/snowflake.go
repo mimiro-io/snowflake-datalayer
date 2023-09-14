@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,25 +27,26 @@ type pool struct {
 var p *pool
 
 type Snowflake struct {
-	cfg Config
+	cfg *Config
 	log zerolog.Logger
 }
 
-func NewSnowflake(cfg Config) (*Snowflake, error) {
-	// let's see what we have
+func NewSnowflake(cfg *Config) (*Snowflake, error) {
 	connectionString := "%s:%s@%s"
-	if cfg.PrivateCert != "" {
-		data, err := base64.StdEncoding.DecodeString(cfg.PrivateCert)
-		if err != nil {
-			return nil, err
-		}
-		//decrypted, err := pemutil.DecryptPKCS8PrivateKey(data, []byte(cfg.CertPassword))
-		//cert, _ := pem.Decode(data)
-		parsedKey, err := x509.ParsePKCS8PrivateKey(data)
-		if err != nil {
-			return nil, err
+	if cfg.PrivateCert != "" || cfg.SnowflakePrivateKey != "" {
+		data, err := base64.StdEncoding.DecodeString(cfg.SnowflakePrivateKey)
+		if err != nil || len(data) == 0 {
+			data, err = base64.StdEncoding.DecodeString(cfg.PrivateCert)
+			if err != nil {
+				return nil, err
+			}
 		}
 
+		parsedKey8, err := x509.ParsePKCS8PrivateKey(data)
+		if err != nil {
+			return nil, err
+		}
+		parsedKey := parsedKey8.(*rsa.PrivateKey)
 		//privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
 		config := &gsf.Config{
 			Account:       cfg.SnowflakeAccount,
@@ -54,7 +56,7 @@ func NewSnowflake(cfg Config) (*Snowflake, error) {
 			Warehouse:     cfg.SnowflakeWarehouse,
 			Region:        "eu-west-1",
 			Authenticator: gsf.AuthTypeJwt,
-			PrivateKey:    parsedKey.(*rsa.PrivateKey),
+			PrivateKey:    parsedKey,
 		}
 		s, err := gsf.DSN(config)
 		if err != nil {
@@ -84,7 +86,7 @@ func NewSnowflake(cfg Config) (*Snowflake, error) {
 	}, nil
 }
 
-// Put returns a list of already uploaded files to be loaded into snowflake, Load must be called subsequently to finnish the process
+// EnsureStageAndPut returns a list of already uploaded files to be loaded into snowflake, Load must be called subsequently to finnish the process
 func (sf *Snowflake) EnsureStageAndPut(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity) ([]string, error) {
 	// by starting with the sql before creating any files, then if no session is valid, we should prevent creating files we won't use
 	// as it fails early
@@ -365,4 +367,70 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 		}
 	}
 	return tx.Commit()
+}
+
+func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping DatasetDefinition) error {
+	var err error
+	var rows *sql.Rows
+	if mapping.IsRaw() {
+		query := fmt.Sprintf("SELECT %s FROM %s.%s.%s",
+			mapping.SourceConfiguration.RawColumn,
+			mapping.SourceConfiguration.Database,
+			mapping.SourceConfiguration.Schema,
+			mapping.SourceConfiguration.TableName)
+		rows, err = p.db.QueryContext(ctx, query)
+		if err != nil {
+			sf.log.Error().Err(err).Msg("Failed to query snowflake")
+			return fmt.Errorf("%w: %w", ErrQuery, err)
+		}
+		defer rows.Close()
+	} else if mapping.SourceConfiguration.MapAll {
+		query := fmt.Sprintf("SELECT * FROM %s.%s.%s",
+			mapping.SourceConfiguration.Database,
+			mapping.SourceConfiguration.Schema,
+			mapping.SourceConfiguration.TableName)
+		rows, err = p.db.QueryContext(ctx, query)
+		if err != nil {
+			sf.log.Error().Err(err).Msg("Failed to query snowflake")
+			return err
+		}
+		defer rows.Close()
+	}
+	if err != nil {
+		sf.log.Error().Err(err).Msg("Failed to query snowflake")
+		return err
+	}
+
+	var headerWritten bool
+	for rows.Next() {
+		if !headerWritten {
+			_, err = fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {"_": "http://snowflake/%s/%s/%s"}}`,
+				mapping.SourceConfiguration.Database, mapping.SourceConfiguration.Schema, mapping.SourceConfiguration.TableName)
+			if err != nil {
+				sf.log.Error().Err(err).Msg("Failed to write context")
+				return err
+			}
+			headerWritten = true
+		}
+		var entity string
+		err = rows.Scan(&entity)
+		if err != nil {
+			sf.log.Error().Err(err).Msg("Failed to scan row")
+			return err
+		}
+		_, err = writer.Write([]byte(",\n" + entity))
+		if err != nil {
+			sf.log.Error().Err(err).Msg("Failed to write row")
+			return err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		sf.log.Error().Err(err).Msg("Failed to read rows")
+		return err
+	}
+	_, err = fmt.Fprintln(writer, "]")
+	if err != nil {
+		return err
+	}
+	return nil
 }

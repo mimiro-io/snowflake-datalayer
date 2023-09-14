@@ -2,14 +2,13 @@ package internal
 
 import (
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/DataDog/datadog-go/v5/statsd"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/rs/zerolog"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"strings"
-	"time"
 )
 
 var LoggerSkipper = func(e echo.Context) bool {
@@ -31,7 +30,7 @@ type LoggerConfig struct {
 	m   statsd.ClientInterface
 }
 
-func DefaultLoggerFilter(cfg Config, m statsd.ClientInterface) echo.MiddlewareFunc {
+func DefaultLoggerFilter(m statsd.ClientInterface) echo.MiddlewareFunc {
 	return LoggerFilter(LoggerConfig{
 		Skipper: LoggerSkipper,
 		m:       m,
@@ -74,14 +73,6 @@ func LoggerFilter(config LoggerConfig) echo.MiddlewareFunc {
 
 			msg := fmt.Sprintf("%d - %s %s (time: %s, size: %d, user_agent: %s)", res.Status, req.Method, req.RequestURI, timed.String(), res.Size, req.UserAgent())
 
-			fields := []zapcore.Field{
-				zap.String("time", timed.String()),
-				zap.String("request", fmt.Sprintf("%s %s", req.Method, req.RequestURI)),
-				zap.Int("status", res.Status),
-				zap.Int64("size", req.ContentLength),
-				zap.String("user_agent", req.UserAgent()),
-			}
-
 			l := config.log.Debug().
 				Str("time", timed.String()).
 				Str("request", fmt.Sprintf("%s %s", req.Method, req.RequestURI)).
@@ -93,11 +84,10 @@ func LoggerFilter(config LoggerConfig) echo.MiddlewareFunc {
 			if id == "" {
 				id = res.Header().Get(echo.HeaderXRequestID)
 				l.Str("request_id", id)
-				fields = append(fields, zap.String("request_id", id))
 			}
 			l.Msg(msg)
 
-			return nil
+			return err
 		}
 	}
 }

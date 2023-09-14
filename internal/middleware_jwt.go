@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"net/http"
-	"strings"
 )
 
 type (
@@ -61,7 +62,7 @@ var (
 	ErrJWTInvalid = echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired jwt")
 )
 
-func DefaultJwtFilter(cfg Config) echo.MiddlewareFunc {
+func DefaultJwtFilter(cfg *Config) echo.MiddlewareFunc {
 	config := JwtConfig{
 		Skipper:   middleware.DefaultSkipper,
 		Wellknown: cfg.JwtWellKnown,

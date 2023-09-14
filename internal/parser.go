@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/mimiro-io/internal-go-util/pkg/uda"
 )
 
 type Entity struct {

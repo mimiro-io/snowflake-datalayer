@@ -50,9 +50,9 @@ You can also enable log-type=json when running a server to get json formatted lo
 Currently, this layer is keyed for Mimiro Snowflake only, so you must use a cert. Not that this code doesn't yet support 
 encrypted certificates, you will have to regenerate the certs once this works.
 
-### Generating compatible certs
+### Generating compatible keypairs
 
-Generate your certificate:
+Generate your private key:
 
 ```shell
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:65537 | openssl pkcs8 -topk8 -nocrypt -outform der > rsa-2048-private-key.p8
@@ -63,16 +63,9 @@ Generate the public key:
 openssl pkey -pubout -inform der -outform der -in rsa-2048-private-key.p8 -out rsa-2048-public-key.spki
 ```
 
-Generate base64 url encoded strings from the binary certificate files, two options:
-1:
-```shell
-make build
-bin/flake encode --input rsa-2048-private-key.p8
-bin/flake endoce --input rsa-2048-public-key.spki
-```
+Generate base64 url encoded strings from the key files:
 
-2: You can use openssl if you dont want to build
-```
+```shell
 openssl base64 -in rsa-2048-private-key.p8 -out rsa-2048-private-key.base64.p8
 openssl base64 -in rsa-2048-public-key.spki -out rsa-2048-public-key.base64.spki
 ```
@@ -81,3 +74,6 @@ You then need to update your user in Snowflake with the public key.
 ```
 ALTER USER <DB username> SET RSA_PUBLIC_KEY='<paste pub key here>'
 ```
+
+When running the server, you need to provide the private key as a base64 encoded string.
+in the env var `SNOWFLAKE_PRIVATE_KEY`.

@@ -1,0 +1,22 @@
+{
+  "dataset_definitions": [
+    {
+      "dataset_name": "huzzah",
+      "source_configuration": {
+        "table_name": "huzzah",
+        "schema_name": "datahub",
+        "database_name": "default",
+        "default_type": "http://data.mimiro.io/Enthusiasm"
+      }
+    },
+    {
+      "dataset_name": "hooray",
+      "source_configuration": {
+        "table_name": "hooray",
+        "schema_name": "datahub",
+        "database_name": "default",
+        "default_type": "http://data.mimiro.io/Enthusiasm"
+      }
+    }
+  ]
+}

@@ -2,13 +2,14 @@ package internal
 
 import (
 	"fmt"
-	"github.com/DataDog/datadog-go/v5/statsd"
 	"math"
 	"os"
 	"runtime"
 	"runtime/metrics"
 	"strings"
 	"time"
+
+	"github.com/DataDog/datadog-go/v5/statsd"
 )
 
 type Metrics struct {
@@ -16,7 +17,7 @@ type Metrics struct {
 	reporter *memoryReporter
 }
 
-func NewMetrics(cfg Config) (*Metrics, error) {
+func NewMetrics(cfg *Config) (*Metrics, error) {
 	agentEndpoint := os.Getenv("DD_AGENT_HOST")
 	m := &Metrics{}
 	if agentEndpoint != "" {
@@ -134,9 +135,9 @@ func getHistogram(h *metrics.Float64Histogram) histogram {
 	for i := range h.Counts {
 		count += h.Counts[i]
 	}
-	max := h.Buckets[len(h.Buckets)-1]
-	if max == math.Inf(1) { // slight optimization
-		max = h.Buckets[len(h.Buckets)-2]
+	maxValue := h.Buckets[len(h.Buckets)-1]
+	if maxValue == math.Inf(1) { // slight optimization
+		maxValue = h.Buckets[len(h.Buckets)-2]
 	}
 
 	median := medianBucket(h)
@@ -144,7 +145,7 @@ func getHistogram(h *metrics.Float64Histogram) histogram {
 
 	return histogram{
 		avg:    float64(avg),
-		max:    max,
+		max:    maxValue,
 		count:  int64(count),
 		median: median,
 	}
