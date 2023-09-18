@@ -1,0 +1,16 @@
+{
+  "id": "1",
+  "data": {
+    "dataset_definitions": [
+      {
+        "dataset_name": "customer",
+        "source_configuration": {
+          "table_name": "customers",
+          "schema": "datahub",
+          "database": "raw",
+          "raw_column": "DB_ENTITY"
+        }
+      }
+    ]
+  }
+}
