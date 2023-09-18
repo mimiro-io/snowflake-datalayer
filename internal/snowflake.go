@@ -80,6 +80,10 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 	p = &pool{
 		db: db,
 	}
+	_, err = db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
+	if err != nil {
+		return nil, err
+	}
 	return &Snowflake{
 		cfg: cfg,
 		log: LOG.With().Str("logger", "snowflake").Logger(),
@@ -372,30 +376,26 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping DatasetDefinition) error {
 	var err error
 	var rows *sql.Rows
+	var query string
 	if mapping.IsRaw() {
-		query := fmt.Sprintf("SELECT %s FROM %s.%s.%s",
+		query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
 			mapping.SourceConfiguration.RawColumn,
 			mapping.SourceConfiguration.Database,
 			mapping.SourceConfiguration.Schema,
 			mapping.SourceConfiguration.TableName)
-		rows, err = p.db.QueryContext(ctx, query)
-		if err != nil {
-			sf.log.Error().Err(err).Msg("Failed to query snowflake")
-			return fmt.Errorf("%w: %w", ErrQuery, err)
-		}
-		defer rows.Close()
 	} else if mapping.SourceConfiguration.MapAll {
-		query := fmt.Sprintf("SELECT * FROM %s.%s.%s",
+		query = fmt.Sprintf("SELECT * FROM %s.%s.%s",
 			mapping.SourceConfiguration.Database,
 			mapping.SourceConfiguration.Schema,
 			mapping.SourceConfiguration.TableName)
-		rows, err = p.db.QueryContext(ctx, query)
-		if err != nil {
-			sf.log.Error().Err(err).Msg("Failed to query snowflake")
-			return err
-		}
-		defer rows.Close()
 	}
+	qctx := gsf.WithStreamDownloader(ctx)
+	rows, err = p.db.QueryContext(qctx, query)
+	if err != nil {
+		sf.log.Error().Err(err).Msg("Failed to query snowflake")
+		return err
+	}
+	defer rows.Close()
 	if err != nil {
 		sf.log.Error().Err(err).Msg("Failed to query snowflake")
 		return err
