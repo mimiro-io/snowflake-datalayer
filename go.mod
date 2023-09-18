@@ -3,6 +3,7 @@ module github.com/mimiro-io/datahub-snowflake-datalayer
 go 1.21
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-go/v5 v5.3.0
 	github.com/bfontaine/jsons v1.1.0
 	github.com/golang-jwt/jwt/v4 v4.5.0
@@ -10,6 +11,8 @@ require (
 	github.com/labstack/echo/v4 v4.11.1
 	github.com/lestrrat-go/jwx/v2 v2.0.12
 	github.com/mimiro-io/internal-go-util v0.0.0-20230307120700-77b59ac32055
+	github.com/onsi/ginkgo/v2 v2.12.0
+	github.com/onsi/gomega v1.27.10
 	github.com/rs/zerolog v1.30.0
 	github.com/snowflakedb/gosnowflake v1.6.24
 )
@@ -20,7 +23,6 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.1.0 // indirect
-	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
 	github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
@@ -50,7 +52,6 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v23.5.26+incompatible // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
@@ -72,8 +73,6 @@ require (
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
-	github.com/onsi/ginkgo/v2 v2.12.0 // indirect
-	github.com/onsi/gomega v1.27.10 // indirect
 	github.com/pierrec/lz4/v4 v4.1.18 // indirect
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -93,6 +92,6 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.13.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
-	google.golang.org/protobuf v1.28.1 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

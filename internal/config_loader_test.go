@@ -43,4 +43,17 @@ var _ = Describe("The config loader", func() {
 		Expect(cfg.DsMappings[0].SourceConfiguration.MapAll).To(Equal(true))
 		Expect(cfg.DsMappings[0].SourceConfiguration.DefaultType).To(Equal("http://data.mimiro.io/Enthusiasm"))
 	})
+
+	It("should unpack datahub content format", func() {
+		c := &ConfigLoader{}
+		//LoadLogger("console", "test", "debug")
+		c.loadConfig = c.loadFile
+		cfg := &Config{ConfigLocation: "../testdata/content.json"}
+		res := c.update(cfg)
+		Expect(res).To(BeTrue(), "config should have been updated after first load")
+
+		Expect(len(cfg.DsMappings)).To(Equal(1), "should have 1 mapping")
+		Expect(cfg.DsMappings[0].DatasetName).To(Equal("customer"))
+		Expect(cfg.DsMappings[0].SourceConfiguration.TableName).To(Equal("customers"))
+	})
 })

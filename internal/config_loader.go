@@ -127,6 +127,11 @@ func (c *ConfigLoader) loadFile(location string) ([]DatasetDefinition, error) {
 	return c.processLoadedConfig(location, reader)
 }
 
+type content struct {
+	Id   string          `json:"id"`
+	Data DsMappingConfig `json:"data"`
+}
+
 func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser) ([]DatasetDefinition, error) {
 	s, err := io.ReadAll(reader)
 	if err != nil {
@@ -139,6 +144,16 @@ func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser
 	if err != nil {
 		LOG.Warn().Err(err).Str("config", string(s)).Msg("Unable to parse config")
 		return nil, err
+	}
+	if len(dsMappingConfig.DatasetDefinitions) == 0 {
+		// Assuming config is embedded in datahub content format
+		c := &content{}
+		err = json.Unmarshal(s, c)
+		if err != nil {
+			LOG.Warn().Err(err).Str("config", string(s)).Msg("Unable to parse config as datahub content")
+			return nil, err
+		}
+		dsMappingConfig = c.Data
 	}
 	return dsMappingConfig.DatasetDefinitions, nil
 }
