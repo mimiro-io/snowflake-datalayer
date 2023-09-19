@@ -200,7 +200,7 @@ func (esp *EntityStreamParser) parseEntity(decoder *json.Decoder) (*Entity, erro
 			} else if v == "refs" {
 				e.References, err = esp.parseReferences(decoder)
 				if err != nil {
-					return nil, fmt.Errorf("unable to parse references: %w", err)
+					return nil, fmt.Errorf("unable to parse references: %w, %+v", err, e)
 				}
 			} else if v == "token" {
 				if !isContinuation {
@@ -248,7 +248,7 @@ func (esp *EntityStreamParser) parseReferences(decoder *json.Decoder) (map[strin
 		case string:
 			val, err := esp.parseRefValue(decoder)
 			if err != nil {
-				return nil, errors.New("unable to parse value of reference key " + v)
+				return nil, fmt.Errorf("unable to parse value of reference key "+v+" err: %w", err)
 			}
 
 			propName := esp.localPropertyMappings[v]
