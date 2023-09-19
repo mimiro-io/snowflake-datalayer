@@ -46,7 +46,7 @@ func NewServer(cfg *Config) (*Server, error) {
 				return err
 			}
 
-			LOG.Error().Err(err).Msg("request failed")
+			LOG.Error().Err(err).Msg("request failed: " + c.Request().RequestURI)
 			return ToHttpError(err)
 		}
 	})

@@ -143,6 +143,9 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 	}
 	if read > 0 {
 		read, entities, files, err = ds.safeEnsureStageAndPut(ctx, dataset, entityContext, entities, files)
+		if err != nil {
+			return err
+		}
 	}
 	if len(files) > 0 {
 

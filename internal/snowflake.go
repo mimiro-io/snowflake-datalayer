@@ -27,8 +27,9 @@ type pool struct {
 var p *pool
 
 type Snowflake struct {
-	cfg *Config
-	log zerolog.Logger
+	cfg        *Config
+	log        zerolog.Logger
+	NewTmpFile func(dataset string) (*os.File, error, func()) // file, error, function to cleanup file
 }
 
 func NewSnowflake(cfg *Config) (*Snowflake, error) {
@@ -72,21 +73,24 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 		}
 	}
 
-	db, err := sql.Open("snowflake", connectionString)
-	if err != nil {
-		return nil, err
-	}
+	if p == nil || p.db == nil {
+		db, err := sql.Open("snowflake", connectionString)
+		if err != nil {
+			return nil, err
+		}
 
-	p = &pool{
-		db: db,
+		p = &pool{
+			db: db,
+		}
 	}
-	_, err = db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
+	_, err := p.db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
 	if err != nil {
 		return nil, err
 	}
 	return &Snowflake{
-		cfg: cfg,
-		log: LOG.With().Str("logger", "snowflake").Logger(),
+		cfg:        cfg,
+		log:        LOG.With().Str("logger", "snowflake").Logger(),
+		NewTmpFile: newTmpFileWriter,
 	}, nil
 }
 
@@ -107,13 +111,22 @@ func (sf *Snowflake) EnsureStageAndPut(ctx context.Context, dataset string, enti
 	return files, nil
 }
 
+func newTmpFileWriter(dataset string) (*os.File, error, func()) {
+	file, err := os.CreateTemp("", dataset)
+	if err != nil {
+		return nil, err, nil
+	}
+	finally := func() { os.Remove(file.Name()) }
+	return file, nil, finally
+}
+
 func (sf *Snowflake) putEntities(dataset string, stage string, entities []*Entity, entityContext *uda.Context) ([]string, error) {
 	// we will handle snowflake in 2 steps, first write each batch as a ndjson file
-	file, err := os.CreateTemp("", dataset)
+	file, err, cleanTmpFile := sf.NewTmpFile(dataset)
 	if err != nil {
 		return nil, err
 	}
-	defer os.Remove(file.Name())
+	defer cleanTmpFile()
 
 	err = sf.gzippedNDJson(file, entities, entityContext, dataset)
 	if err != nil {
@@ -134,7 +147,7 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*Entit
 	return files, nil
 }
 
-func (sf *Snowflake) gzippedNDJson(file *os.File, entities []*Entity, entityContext *uda.Context, dataset string) error {
+func (sf *Snowflake) gzippedNDJson(file io.Writer, entities []*Entity, entityContext *uda.Context, dataset string) error {
 	zipWriter := gzip.NewWriter(file)
 	j := jsons.NewWriter(zipWriter)
 	for _, entity := range entities {
