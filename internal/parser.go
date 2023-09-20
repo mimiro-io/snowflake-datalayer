@@ -248,7 +248,9 @@ func (esp *EntityStreamParser) parseReferences(decoder *json.Decoder) (map[strin
 		case string:
 			val, err := esp.parseRefValue(decoder)
 			if err != nil {
-				return nil, fmt.Errorf("unable to parse value of reference key "+v+" err: %w", err)
+				LOG.Error().Err(err).Str("ref", v).Msg("unable to parse reference value. skipping this reference")
+				continue
+				//return nil, fmt.Errorf("unable to parse value of reference key "+v+" err: %w", err)
 			}
 
 			propName := esp.localPropertyMappings[v]
