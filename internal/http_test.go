@@ -150,7 +150,7 @@ var _ = Describe("The web server", func() {
 "y": "http://snowflake/bar/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 }},
-{"id": "x:1", "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:1", "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello", "x:nogood": null, "x:bad": [null]}},
 {"id": "x:2", "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
 `))
 			Expect(err).NotTo(HaveOccurred())
