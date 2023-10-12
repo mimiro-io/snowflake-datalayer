@@ -46,6 +46,12 @@ func NewServer(cfg *Config) (*Server, error) {
 				return err
 			}
 
+			// if the response is already committed, we can't change the status code.
+			// but we can append a message to the response body to make the response invalid
+			// and to add information for the consumer
+			if c.Response().Committed {
+				c.Response().Write([]byte(",   error while streaming response: " + err.Error()))
+			}
 			LOG.Error().Err(err).Msg("request failed: " + c.Request().RequestURI)
 			return ToHttpError(err)
 		}

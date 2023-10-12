@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	common_datalayer "github.com/mimiro-io/common-datalayer"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -61,9 +63,9 @@ var _ = Describe("The web server", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			GinkgoLogr.Info(string(bodyBytes))
 			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
-"_": "http://snowflake/foo/bar/baz",
+"_": "http://snowflake/foo/bar/baz/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 }},
 {"id": "1", "props": {"foo": "bar"}, "refs": {}},
@@ -73,10 +75,10 @@ var _ = Describe("The web server", func() {
 		It("should return 400 if implicit parsing fails", func() {
 			resp, err := http.Get("http://localhost:17866/datasets/foo-bar.baz/entities")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.StatusCode).To(Equal(400))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(bodyBytes)).To(Equal("{\"message\":\"No mapping for dataset\"}\n"))
+			Expect(resp.StatusCode).To(Equal(400))
 		})
 		// ideally, it should return 400, but it returns 500 because we dont check what the underlying query error actually is caused by
 		It("should return 500 if table not found", func() {
@@ -93,10 +95,10 @@ var _ = Describe("The web server", func() {
 	})
 	Context("when getting entities with configured (explicit) dataset names", func() {
 		It("should return 200 if table found", func() {
-			cfg.DsMappings = []DatasetDefinition{
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
 				{
 					DatasetName: "cucumber",
-					SourceConfiguration: SourceConfiguration{
+					SourceConfig: map[string]any{
 						TableName: "baz",
 						Schema:    "bar",
 						Database:  "foo",
@@ -118,12 +120,174 @@ var _ = Describe("The web server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			//GinkgoLogr.Info(string(bodyBytes))
 			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
-"_": "http://snowflake/foo/bar/baz",
+"_": "http://snowflake/foo/bar/baz/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 }},
 {"id": "1", "props": {"foo": "bar"}, "refs": {}},
 {"id": "2", "props": {"foo": "bar2"}, "refs":{}}]
 `))
+		})
+	})
+	Context("when getting rows with mappings", func() {
+		It("should return entities with selected mapped props and refs", func() {
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "banana",
+					SourceConfig: map[string]any{
+						TableName: "banana",
+						Schema:    "bar",
+						Database:  "foo",
+					}, OutgoingMappingConfig: &common_datalayer.OutgoingMappingConfig{
+						BaseURI: "http://banana/test/",
+						Constructions: []*common_datalayer.PropertyConstructor{{
+							PropertyName: "id",
+							Operation:    "replace",
+							Arguments:    []string{"id", "ns65:", ""},
+						}, {
+							PropertyName: "origin",
+							Operation:    "replace",
+							Arguments:    []string{"origin", " ", "_"},
+						}},
+						PropertyMappings: []*common_datalayer.ItemToEntityPropertyMapping{{
+							Required:        true,
+							Property:        "id",
+							Datatype:        "string",
+							IsIdentity:      true,
+							URIValuePattern: "http://banana/test/id/{value}",
+						}, {
+							Property:       "name",
+							EntityProperty: "Name",
+						}, {
+							Property:       "color",
+							EntityProperty: "Color",
+						}, {
+							Property:        "origin",
+							EntityProperty:  "From",
+							IsReference:     true,
+							URIValuePattern: "http://banana/test/origin/{value}",
+						}, {
+							Property:       "amt",
+							EntityProperty: "Amount",
+						}, {
+							Property:       "for_sale",
+							EntityProperty: "ForSale",
+						},
+						},
+						MapAll: false,
+					},
+				},
+			}
+			mock.ExpectQuery("SELECT id, name, color, origin, amt, for_sale FROM foo.bar.banana").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"id", "name", "color", "origin", "amt", "for_sale"}).
+					AddRow("ns65:1", "Dole", "green", "Colombia", 546554, true).
+					AddRow("ns65:2", "Chiquita", "yellow", "Costa Rica", 157556, false),
+				)
+			resp, err := http.Get("http://localhost:17866/datasets/banana/entities")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			bodyBytes, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			//GinkgoLogr.Info(string(bodyBytes))
+			nsm := egdm.NewNamespaceContext()
+			parser := egdm.NewEntityParser(nsm).WithExpandURIs()
+			coll, err := parser.LoadEntityCollection(strings.NewReader(string(bodyBytes)))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(coll.Entities).To(HaveLen(2))
+			e := coll.Entities[0]
+			Expect(e.ID).To(Equal("http://banana/test/id/1"))
+			Expect(e.Properties).To(HaveLen(4))
+			Expect(e.Properties["http://banana/test/Name"]).To(Equal("Dole"))
+			Expect(e.Properties["http://banana/test/Color"]).To(Equal("green"))
+			Expect(e.Properties["http://banana/test/Amount"]).To(BeEquivalentTo(546554))
+			Expect(e.Properties["http://banana/test/ForSale"]).To(Equal(true))
+			Expect(e.References).To(HaveLen(1))
+			Expect(e.References["http://banana/test/From"]).To(Equal("http://banana/test/origin/Colombia"))
+			e = coll.Entities[1]
+			Expect(e.ID).To(Equal("http://banana/test/id/2"))
+			Expect(e.Properties).To(HaveLen(4))
+			Expect(e.Properties["http://banana/test/Name"]).To(Equal("Chiquita"))
+			Expect(e.Properties["http://banana/test/Color"]).To(Equal("yellow"))
+			Expect(e.Properties["http://banana/test/Amount"]).To(BeEquivalentTo(157556))
+			Expect(e.Properties["http://banana/test/ForSale"]).To(Equal(false))
+			Expect(e.References).To(HaveLen(1))
+			Expect(e.References["http://banana/test/From"]).To(Equal("http://banana/test/origin/Costa_Rica"))
+		})
+		It("should return entities with all fields as props and selected refs", func() {
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "banana",
+					SourceConfig: map[string]any{
+						TableName: "banana",
+						Schema:    "bar",
+						Database:  "foo",
+					}, OutgoingMappingConfig: &common_datalayer.OutgoingMappingConfig{
+						BaseURI: "http://banana/test/",
+						Constructions: []*common_datalayer.PropertyConstructor{{
+							PropertyName: "id",
+							Operation:    "replace",
+							Arguments:    []string{"id", "ns65:", ""},
+						}, {
+							PropertyName: "origin",
+							Operation:    "replace",
+							Arguments:    []string{"origin", " ", "_"},
+						}},
+						PropertyMappings: []*common_datalayer.ItemToEntityPropertyMapping{{
+							Required:        true,
+							EntityProperty:  "id",
+							Property:        "id",
+							Datatype:        "string",
+							IsReference:     false,
+							IsIdentity:      true,
+							URIValuePattern: "http://banana/test/id/{value}",
+						}, {
+							Property:        "origin",
+							EntityProperty:  "From",
+							IsReference:     true,
+							URIValuePattern: "http://banana/test/origin/{value}",
+						}},
+						MapAll: true,
+					},
+				},
+			}
+
+			mock.ExpectQuery("SELECT \\* FROM foo.bar.banana").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"id", "name", "color", "origin", "amt", "for_sale"}).
+					AddRow("ns65:1", "Dole", "green", "Colombia", 546554, true).
+					AddRow("ns65:2", "Chiquita", "yellow", "Costa Rica", 157556, false),
+				)
+			resp, err := http.Get("http://localhost:17866/datasets/banana/entities")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+
+			bodyBytes, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			//GinkgoLogr.Info(string(bodyBytes))
+			nsm := egdm.NewNamespaceContext()
+			parser := egdm.NewEntityParser(nsm).WithExpandURIs()
+			coll, err := parser.LoadEntityCollection(strings.NewReader(string(bodyBytes)))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(coll.Entities).To(HaveLen(2))
+			e := coll.Entities[0]
+			Expect(e.ID).To(Equal("http://banana/test/id/1"))
+			Expect(e.Properties).To(HaveLen(6))
+			Expect(e.Properties["http://banana/test/name"]).To(Equal("Dole"))
+			Expect(e.Properties["http://banana/test/color"]).To(Equal("green"))
+			Expect(e.Properties["http://banana/test/amt"]).To(BeEquivalentTo(546554))
+			Expect(e.Properties["http://banana/test/for_sale"]).To(Equal(true))
+			Expect(e.References).To(HaveLen(1))
+			Expect(e.References["http://banana/test/From"]).To(Equal("http://banana/test/origin/Colombia"))
+			e = coll.Entities[1]
+			Expect(e.ID).To(Equal("http://banana/test/id/2"))
+			Expect(e.Properties).To(HaveLen(6))
+			Expect(e.Properties["http://banana/test/name"]).To(Equal("Chiquita"))
+			Expect(e.Properties["http://banana/test/color"]).To(Equal("yellow"))
+			Expect(e.Properties["http://banana/test/amt"]).To(BeEquivalentTo(157556))
+			Expect(e.Properties["http://banana/test/for_sale"]).To(Equal(false))
+			Expect(e.References).To(HaveLen(1))
+			Expect(e.References["http://banana/test/From"]).To(Equal("http://banana/test/origin/Costa_Rica"))
+
 		})
 	})
 	Context("when posting entities in incremental mode", func() {

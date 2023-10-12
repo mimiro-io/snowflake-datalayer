@@ -36,12 +36,11 @@ var _ = Describe("The config loader", func() {
 
 		Expect(len(cfg.DsMappings)).To(Equal(1), "should have 1 mapping")
 		Expect(cfg.DsMappings[0].DatasetName).To(Equal("huzzah"), "should have name huzzah")
-		Expect(cfg.DsMappings[0].SourceConfiguration.TableName).To(Equal("ns_huzzah"))
-		Expect(cfg.DsMappings[0].SourceConfiguration.Schema).To(Equal("datahub"))
-		Expect(cfg.DsMappings[0].SourceConfiguration.Database).To(Equal("raw"))
-		Expect(cfg.DsMappings[0].SourceConfiguration.RawColumn).To(Equal("DB_ENTITY"))
-		Expect(cfg.DsMappings[0].SourceConfiguration.MapAll).To(Equal(true))
-		Expect(cfg.DsMappings[0].SourceConfiguration.DefaultType).To(Equal("http://data.mimiro.io/Enthusiasm"))
+		Expect(cfg.DsMappings[0].SourceConfig[TableName]).To(Equal("ns_huzzah"))
+		Expect(cfg.DsMappings[0].SourceConfig[Schema]).To(Equal("datahub"))
+		Expect(cfg.DsMappings[0].SourceConfig[Database]).To(Equal("raw"))
+		Expect(cfg.DsMappings[0].SourceConfig[RawColumn]).To(Equal("DB_ENTITY"))
+		//Expect(cfg.DsMappings[0].SourceConfig[DefaultType]).To(Equal("http://data.mimiro.io/Enthusiasm"))
 	})
 
 	It("should unpack datahub content format", func() {
@@ -54,6 +53,6 @@ var _ = Describe("The config loader", func() {
 
 		Expect(len(cfg.DsMappings)).To(Equal(1), "should have 1 mapping")
 		Expect(cfg.DsMappings[0].DatasetName).To(Equal("customer"))
-		Expect(cfg.DsMappings[0].SourceConfiguration.TableName).To(Equal("customers"))
+		Expect(cfg.DsMappings[0].SourceConfig[TableName]).To(Equal("customers"))
 	})
 })

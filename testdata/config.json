@@ -1,14 +1,12 @@
 {
   "dataset_definitions": [
     {
-      "dataset_name": "huzzah",
-      "source_configuration": {
+      "name": "huzzah",
+      "source_config": {
         "table_name": "ns_huzzah",
         "schema": "datahub",
         "database": "raw",
-        "raw_column": "DB_ENTITY",
-        "default_type": "http://data.mimiro.io/Enthusiasm",
-        "map_all": true
+        "raw_column": "DB_ENTITY"
       }
     }
   ]

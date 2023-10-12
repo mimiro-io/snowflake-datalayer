@@ -10,12 +10,14 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	common_datalayer "github.com/mimiro-io/common-datalayer"
 )
 
 type ConfigLoader struct {
 	ticker      *time.Ticker
 	httpClient  *http.Client
-	loadConfig  func(location string) ([]DatasetDefinition, error)
+	loadConfig  func(location string) ([]*common_datalayer.DatasetDefinition, error)
 	cachedToken string
 	cacheUntil  time.Time
 }
@@ -81,8 +83,8 @@ func (c *ConfigLoader) Stop() {
 	c.ticker.Stop()
 }
 
-func (c *ConfigLoader) loadUrl(clientId, clientSecret, audience, grantType, endPoint string) func(configEndpoint string) ([]DatasetDefinition, error) {
-	return func(configEndpoint string) ([]DatasetDefinition, error) {
+func (c *ConfigLoader) loadUrl(clientId, clientSecret, audience, grantType, endPoint string) func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
+	return func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
 		req, err := http.NewRequest("GET", configEndpoint, nil) //
 		if err != nil {
 			return nil, err
@@ -118,7 +120,7 @@ func (c *ConfigLoader) loadUrl(clientId, clientSecret, audience, grantType, endP
 	}
 }
 
-func (c *ConfigLoader) loadFile(location string) ([]DatasetDefinition, error) {
+func (c *ConfigLoader) loadFile(location string) ([]*common_datalayer.DatasetDefinition, error) {
 	reader, err := os.Open(location)
 	if err != nil {
 		LOG.Error().Err(err).Msg("Unable to open config file: " + location)
@@ -128,18 +130,18 @@ func (c *ConfigLoader) loadFile(location string) ([]DatasetDefinition, error) {
 }
 
 type content struct {
-	Id   string          `json:"id"`
-	Data DsMappingConfig `json:"data"`
+	Id   string                  `json:"id"`
+	Data common_datalayer.Config `json:"data"`
 }
 
-func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser) ([]DatasetDefinition, error) {
+func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser) ([]*common_datalayer.DatasetDefinition, error) {
 	s, err := io.ReadAll(reader)
 	if err != nil {
 		LOG.Error().Err(err).Msg("Unable to read config from : " + location)
 		return nil, err
 	}
 	LOG.Debug().Str("config", string(s)).Msg("Loaded config from " + location)
-	var dsMappingConfig DsMappingConfig
+	var dsMappingConfig common_datalayer.Config
 	err = json.Unmarshal(s, &dsMappingConfig)
 	if err != nil {
 		LOG.Warn().Err(err).Str("config", string(s)).Msg("Unable to parse config")

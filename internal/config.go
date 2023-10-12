@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	common_datalayer "github.com/mimiro-io/common-datalayer"
 )
 
 type Config struct {
@@ -30,7 +32,7 @@ type Config struct {
 	//NodePublicKey            string
 	Authenticator            string
 	MemoryHeadroom           int
-	DsMappings               []DatasetDefinition
+	DsMappings               []*common_datalayer.DatasetDefinition
 	ConfigLocation           string
 	ConfigLoaderInterval     int
 	ConfigLoaderClientId     string
@@ -146,11 +148,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) Mapping(name string) (DatasetDefinition, error) {
+func (c *Config) Mapping(name string) (*common_datalayer.DatasetDefinition, error) {
 	for _, mapping := range c.DsMappings {
 		if mapping.DatasetName == name {
 			return mapping, nil
 		}
 	}
-	return DatasetDefinition{}, fmt.Errorf("mapping %s not found", name)
+	return nil, fmt.Errorf("mapping %s not found", name)
 }

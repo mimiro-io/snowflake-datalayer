@@ -89,31 +89,43 @@ curl http://<layerhost>/datasets/<database>.<schema>.<table>/entities
 
 The layer can be configured to read from tables that do not follow the convention based reading.
 To do so, create a dataset configuration for layer. The configuration is a json object with the following fields:
+
+For details on the options in outgoing_mapping_config, see the [mappings documentation](https://github.com/mimiro-io/common-datalayer#data-layer-configuration).
 ```json
 {
   "dataset_definitions": [
     {
-      "dataset_name": "name of the dataset (uri path)",
-      "source_configuration": {
+      "name": "name of the dataset (uri path)",
+      "source_config": {
         "table_name": "name of the table in snowflake",
         "schema": "name of the schema in snowflake",
         "database": "name of the database in snowflake",
-        "raw_column": "optional name of the column containing a raw json entity",
-        "default_type": "optional default type for mapped entities in the dataset",
-        "map_all": true // optional, if true, all undeclared columns are mapped to properties
+        "raw_column": "optional name of the column containing a raw json entity"
       },
-      "mappings": [ // optional, not used when a raw_column is configured
-        {
+      "outgoing_mapping_config": { // optional, not used when a raw_column is configured
+        "base_uri": "http://example.com",
+        "constructions": [{
+          "property": "name",
+          "operation": "replace",
+          "args": ["arg1", "arg2", "arg3"]
+        }],
+        "property_mappings": [{
+          "required": true,
           "entity_property": "property name in the entity",
           "property": "name of the column in the table",
           "datatype": "int", // conversion hint for the layer
           "is_reference": false, // if true, the value is treated as a reference to another entity
-          "url_value_pattern": "http://localhost:8080/animal/{value}" // optional, if set, the value used as string template to construct a property value
-        }
-      ]
+          "uri_value_pattern": "http://example.com/{value}",// optional, if set, the value used as string template to construct a property value
+          "is_identity": false,
+          "default_value": "default"
+        }],
+        "map_all": true
+      }
     }
   ]
 }
+
+
 ```
 This configuration format can be read from a file or from an url. The layer will look 
 for the env var `CONFIG_LOCATION`. It will also re-read the configuration file every minute
