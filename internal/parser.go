@@ -80,7 +80,6 @@ func NewEntityStreamParser() *EntityStreamParser {
 }
 
 func (esp *EntityStreamParser) ParseStream(reader io.Reader, emitEntity func(*Entity) error) error {
-
 	decoder := json.NewDecoder(reader)
 
 	// expect Start of array
@@ -250,7 +249,7 @@ func (esp *EntityStreamParser) parseReferences(decoder *json.Decoder) (map[strin
 			if err != nil {
 				LOG.Error().Err(err).Str("ref", v).Msg("unable to parse reference value. skipping this reference")
 				continue
-				//return nil, fmt.Errorf("unable to parse value of reference key "+v+" err: %w", err)
+				// return nil, fmt.Errorf("unable to parse value of reference key "+v+" err: %w", err)
 			}
 
 			propName := esp.localPropertyMappings[v]
@@ -434,7 +433,6 @@ func (esp *EntityStreamParser) parseValue(decoder *json.Decoder) (any, error) {
 }
 
 func (esp *EntityStreamParser) getNamespacedIdentifier(val string, localNamespaces map[string]string) (string, error) {
-
 	if val == "" {
 		return "", errors.New("empty value not allowed")
 	}
@@ -486,7 +484,6 @@ func (esp *EntityStreamParser) getNamespacedIdentifier(val string, localNamespac
 }
 
 func (esp *EntityStreamParser) assertPrefixMappingForExpansion(uriExpansion string) (string, error) {
-
 	prefix := esp.localNamespaces[uriExpansion]
 	if prefix == "" {
 		prefix = "ns" + strconv.Itoa(len(esp.localNamespaces))
@@ -496,7 +493,6 @@ func (esp *EntityStreamParser) assertPrefixMappingForExpansion(uriExpansion stri
 }
 
 func getUrlParts(url string) (string, string, error) {
-
 	index := strings.LastIndex(url, "#")
 	if index > -1 {
 		return url[:index+1], url[index+1:], nil
@@ -509,3 +505,4 @@ func getUrlParts(url string) (string, string, error) {
 
 	return "", "", errors.New("unable to split url") // fixme do something better
 }
+

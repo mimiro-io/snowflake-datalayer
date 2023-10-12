@@ -30,11 +30,10 @@ func StartConfigLoader(cfg *Config) *ConfigLoader {
 	}
 	LOG.Info().Msg("Starting config loader")
 	go func() {
+		c.update(cfg)
 		for {
-			select {
-			case <-c.ticker.C:
-				c.update(cfg)
-			}
+			<-c.ticker.C // block until signal
+			c.update(cfg)
 		}
 	}()
 	return c
@@ -48,8 +47,8 @@ func newConfigLoader(cfg *Config) *ConfigLoader {
 		c.httpClient = &http.Client{
 			Timeout: 10 * time.Second,
 		}
-		c.loadConfig = c.loadUrl(
-			cfg.ConfigLoaderClientId,
+		c.loadConfig = c.loadURL(
+			cfg.ConfigLoaderClientID,
 			cfg.ConfigLoaderClientSecret,
 			cfg.ConfigLoaderAudience,
 			cfg.ConfigLoaderGrantType,
@@ -76,14 +75,13 @@ func (c *ConfigLoader) update(cfg *Config) bool {
 		LOG.Debug().Msg("Config unchanged")
 		return false
 	}
-
 }
 
 func (c *ConfigLoader) Stop() {
 	c.ticker.Stop()
 }
 
-func (c *ConfigLoader) loadUrl(clientId, clientSecret, audience, grantType, endPoint string) func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
+func (c *ConfigLoader) loadURL(clientID, clientSecret, audience, grantType, endPoint string) func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
 	return func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
 		req, err := http.NewRequest("GET", configEndpoint, nil) //
 		if err != nil {
@@ -91,7 +89,7 @@ func (c *ConfigLoader) loadUrl(clientId, clientSecret, audience, grantType, endP
 		}
 		now := time.Now()
 		if c.cachedToken == "" || now.After(c.cacheUntil) {
-			res, err2 := c.fetchNewConfigToken(clientId, clientSecret, audience, grantType, endPoint)
+			res, err2 := c.fetchNewConfigToken(clientID, clientSecret, audience, grantType, endPoint)
 			if err2 != nil {
 				LOG.Error().Err(err2).Msg("Unable to fetch new config token")
 				return nil, err2
@@ -130,7 +128,7 @@ func (c *ConfigLoader) loadFile(location string) ([]*common_datalayer.DatasetDef
 }
 
 type content struct {
-	Id   string                  `json:"id"`
+	ID   string                  `json:"id"`
 	Data common_datalayer.Config `json:"data"`
 }
 
@@ -167,9 +165,9 @@ type cnfAuthResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func (c *ConfigLoader) fetchNewConfigToken(clientId, clientSecret, audience, grantType, endpoint string) (*cnfAuthResponse, error) {
+func (c *ConfigLoader) fetchNewConfigToken(clientID, clientSecret, audience, grantType, endpoint string) (*cnfAuthResponse, error) {
 	requestBody, err := json.Marshal(map[string]string{
-		"client_id":     clientId,
+		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"audience":      audience,
 		"grant_type":    grantType,
@@ -192,9 +190,9 @@ func (c *ConfigLoader) fetchNewConfigToken(clientId, clientSecret, audience, gra
 		return nil, err
 	}
 	if res.StatusCode != 200 {
-		b, err := io.ReadAll(res.Body)
-		if err != nil {
-			return nil, err
+		b, err2 := io.ReadAll(res.Body)
+		if err2 != nil {
+			return nil, err2
 		}
 		return nil, fmt.Errorf("not authorized. status=%v, err=%v", res.Status, string(b))
 	}

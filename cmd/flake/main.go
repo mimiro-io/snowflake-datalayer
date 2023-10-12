@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	var cfg *internal.Config = &internal.Config{}
+	cfg := &internal.Config{}
 	if err := cfg.ServerFlags().Parse(os.Args); err != nil {
 		panic(err)
 	}
@@ -56,5 +56,4 @@ func main() {
 	if err := s.E.Shutdown(ctx); err != nil {
 		internal.LOG.Fatal().Err(err).Msg(err.Error())
 	}
-
 }

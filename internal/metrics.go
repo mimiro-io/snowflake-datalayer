@@ -63,11 +63,9 @@ func (mr *memoryReporter) init() {
 			mr.run(samples)
 		}
 	}()
-
 }
 
 func (mr *memoryReporter) run(samples []metrics.Sample) {
-
 	// Sample the metrics. Re-use the samples slice if you can!
 	metrics.Read(samples)
 
@@ -166,3 +164,4 @@ func medianBucket(h *metrics.Float64Histogram) float64 {
 	}
 	return 0.0
 }
+

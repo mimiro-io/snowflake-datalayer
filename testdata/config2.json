@@ -14,7 +14,8 @@
       "source_config": {
         "table_name": "hooray",
         "schema": "datahub",
-        "database": "default"
+        "database": "default",
+        "since_column": "recorded"
       },
       "outgoing_mapping_config": {
         "base_uri": "http://example.com",

@@ -50,10 +50,10 @@ func NewServer(cfg *Config) (*Server, error) {
 			// but we can append a message to the response body to make the response invalid
 			// and to add information for the consumer
 			if c.Response().Committed {
-				c.Response().Write([]byte(",   error while streaming response: " + err.Error()))
+				_, _ = c.Response().Write([]byte(",   error while streaming response: " + err.Error()))
 			}
 			LOG.Error().Err(err).Msg("request failed: " + c.Request().RequestURI)
-			return ToHttpError(err)
+			return ToHTTPError(err)
 		}
 	})
 	if cfg.Authenticator == "jwt" {
@@ -67,6 +67,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	g.POST("/:dataset/entities", h.postEntities)
 
 	g.GET("/:dataset/entities", h.getEntities)
+	g.GET("/:dataset/changes", h.getEntities)
 	return &Server{
 		cfg:     cfg,
 		E:       e,
@@ -119,12 +120,12 @@ func newHandler(cfg *Config) (*handler, error) {
 const (
 	FsStartHeader = "universal-data-api-full-sync-start" //  bool
 	FsEndHeader   = "universal-data-api-full-sync-end"   //  bool
-	FsIdHeader    = "universal-data-api-full-sync-id"    // string
+	FsIDHeader    = "universal-data-api-full-sync-id"    // string
 )
 
 type dsInfo struct {
 	name    string
-	fsId    string
+	fsID    string
 	fsStart bool
 	fsEnd   bool
 	limit   int
@@ -132,7 +133,7 @@ type dsInfo struct {
 }
 
 func (i dsInfo) IsFullSync() bool {
-	return i.fsId != ""
+	return i.fsID != ""
 }
 
 func (h *handler) postEntities(c echo.Context) error {
@@ -166,34 +167,33 @@ func extractDsInfo(c echo.Context) (dsInfo, error) {
 	dataset := c.Param("dataset")
 	res := dsInfo{
 		name:    dataset,
-		fsId:    c.Request().Header.Get(FsIdHeader),
+		fsID:    c.Request().Header.Get(FsIDHeader),
 		fsStart: c.Request().Header.Get(FsStartHeader) == "true",
 		fsEnd:   c.Request().Header.Get(FsEndHeader) == "true",
 		limit:   0,
 		since:   "",
 	}
 	if c.QueryParam("since") != "" {
-		return dsInfo{}, fmt.Errorf("limit not supported yet")
-		//res.since = c.QueryParam("since")
+		res.since = c.QueryParam("since")
 	}
 	if c.QueryParam("limit") != "" {
-		limit, err := strconv.Atoi(c.QueryParam("limit"))
-		if err != nil {
-			return dsInfo{}, fmt.Errorf("limit is not a number")
-		}
-		if limit < 0 {
-			return dsInfo{}, fmt.Errorf("limit is negative")
-		}
-		return dsInfo{}, fmt.Errorf("limit not supported yet")
-		//res.limit = limit
+		//limit, err := strconv.Atoi(c.QueryParam("limit"))
+		//if err != nil {
+		//	return dsInfo{}, fmt.Errorf("limit is not a number")
+		//}
+		//if limit < 0 {
+		//	return dsInfo{}, fmt.Errorf("limit is negative")
+		//}
+		// res.limit = limit
+		return dsInfo{}, fmt.Errorf("limit not supported")
 	}
-	if res.fsId != "" {
-		res.fsId = strings.ReplaceAll(res.fsId, "-", "_")
+	if res.fsID != "" {
+		res.fsID = strings.ReplaceAll(res.fsID, "-", "_")
 	}
 	if dataset == "" {
 		return dsInfo{}, fmt.Errorf("dataset not specified")
 	}
-	if (res.fsEnd || res.fsStart) && res.fsId == "" {
+	if (res.fsEnd || res.fsStart) && res.fsID == "" {
 		return dsInfo{}, fmt.Errorf("full sync id not specified")
 	}
 	return res, nil

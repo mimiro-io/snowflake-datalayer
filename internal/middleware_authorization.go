@@ -41,7 +41,7 @@ func JwtAuthorizer(scopes ...string) echo.MiddlewareFunc {
 					subject := claims.Subject
 					// it needs the subject in the url
 					uri := c.Request().RequestURI
-					if strings.Index(uri, subject) == -1 { // not present, so forbidden
+					if !strings.Contains(uri, subject) { // not present, so forbidden
 						return echo.NewHTTPError(http.StatusForbidden, "user has no access to path")
 					}
 				}

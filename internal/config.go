@@ -16,26 +16,26 @@ type Config struct {
 	LogType             string
 	LogLevel            string
 	ServiceName         string
-	PrivateCert         string //deprecated
+	PrivateCert         string // deprecated
 	SnowflakeUser       string
 	SnowflakePassword   string
 	SnowflakeAccount    string
-	SnowflakeDb         string
+	SnowflakeDB         string
 	SnowflakeSchema     string
 	SnowflakeWarehouse  string
-	SnowflakeUri        string
+	SnowflakeURI        string
 	SnowflakePrivateKey string
 	Port                int
 	JwtWellKnown        string
 	TokenIssuer         string
 	TokenAudience       string
-	//NodePublicKey            string
+	// NodePublicKey            string
 	Authenticator            string
 	MemoryHeadroom           int
 	DsMappings               []*common_datalayer.DatasetDefinition
 	ConfigLocation           string
 	ConfigLoaderInterval     int
-	ConfigLoaderClientId     string
+	ConfigLoaderClientID     string
 	ConfigLoaderClientSecret string
 	ConfigLoaderAudience     string
 	ConfigLoaderGrantType    string
@@ -50,15 +50,15 @@ func (c *Config) common() *flag.FlagSet {
 	fs.StringVar(&c.SnowflakeUser, "snowflake-user", "", "Snowflake username. Required.")
 	fs.StringVar(&c.SnowflakePassword, "snowflake-password", "", "Snowflake password. Required.")
 	fs.StringVar(&c.SnowflakeAccount, "snowflake-account", "", "Snowflake account to use.")
-	fs.StringVar(&c.SnowflakeDb, "snowflake-db", "", "Snowflake db to write to.")
+	fs.StringVar(&c.SnowflakeDB, "snowflake-db", "", "Snowflake db to write to.")
 	fs.StringVar(&c.SnowflakeSchema, "snowflake-schema", "", "Snowflake schema if set.")
 	fs.StringVar(&c.SnowflakeWarehouse, "snowflake-warehouse", "", "Snowflake warehouse")
-	fs.StringVar(&c.SnowflakeUri, "snowflake-connection-string", "", "Alternative if more parameters are needed.")
+	fs.StringVar(&c.SnowflakeURI, "snowflake-connection-string", "", "Alternative if more parameters are needed.")
 	fs.StringVar(&c.SnowflakePrivateKey, "snowflake-private-key", "", "base64 encoded private key.")
 	fs.StringVar(&c.PrivateCert, "private-cert", "", "deprecated, use snowflake-private-key.")
 	fs.IntVar(&c.ConfigLoaderInterval, "config-loader-interval", 60, "Interval in seconds to reload config file")
 	fs.StringVar(&c.ConfigLocation, "config-location", "", "Location of config file. file:// or http://")
-	fs.StringVar(&c.ConfigLoaderClientId, "config-loader-client-id", "", "Client id for config loader")
+	fs.StringVar(&c.ConfigLoaderClientID, "config-loader-client-id", "", "Client id for config loader")
 	fs.StringVar(&c.ConfigLoaderClientSecret, "config-loader-client-secret", "", "Client secret for config loader")
 	fs.StringVar(&c.ConfigLoaderAudience, "config-loader-audience", "", "Audience for config loader")
 	fs.StringVar(&c.ConfigLoaderGrantType, "config-loader-grant-type", "", "Grant type for config loader")
@@ -79,7 +79,7 @@ func (c *Config) ServerFlags() *flag.FlagSet {
 	fs.StringVar(&c.JwtWellKnown, "well-known", "", "url to well-known.json endpoint")
 	fs.StringVar(&c.TokenIssuer, "issuer", "", "either a jwt issuer or a node:<id> issuer if public key is set")
 	fs.StringVar(&c.TokenAudience, "audience", "", "either a jwt audience or a node:<id> audience if public key is set")
-	//fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
+	// fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
 	fs.StringVar(&c.Authenticator, "authenticator", "jwt", "middleware for authentication. 'noop' disables auth, jwt enables it")
 	return fs
 }
@@ -94,9 +94,9 @@ func (c *Config) LoadEnv() error {
 		"SnowflakeUser:SNOWFLAKE_USER",
 		"SnowflakePassword:SNOWFLAKE_PASSWORD",
 		"SnowflakeAccount:SNOWFLAKE_ACCOUNT",
-		"SnowflakeDb:SNOWFLAKE_DB",
+		"SnowflakeDB:SNOWFLAKE_DB",
 		"SnowflakeSchema:SNOWFLAKE_SCHEMA",
-		"SnowflakeUri:SNOWFLAKE_CONNECTION_STRING",
+		"SnowflakeURI:SNOWFLAKE_CONNECTION_STRING",
 		"SnowflakePrivateKey:SNOWFLAKE_PRIVATE_KEY",
 		"Port:PORT",
 		"MemoryHeadroom:MEMORY_HEADROOM",
@@ -108,7 +108,7 @@ func (c *Config) LoadEnv() error {
 		"PrivateCert:PRIVATE_CERT",
 		"ConfigLocation:CONFIG_LOCATION",
 		"ConfigLoaderInterval:CONFIG_LOADER_INTERVAL",
-		"ConfigLoaderClientId:CONFIG_LOADER_CLIENT_ID",
+		"ConfigLoaderClientID:CONFIG_LOADER_CLIENT_ID",
 		"ConfigLoaderClientSecret:CONFIG_LOADER_CLIENT_SECRET",
 		"ConfigLoaderAudience:CONFIG_LOADER_AUDIENCE",
 		"ConfigLoaderGrantType:CONFIG_LOADER_GRANT_TYPE",
