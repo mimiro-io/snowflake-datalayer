@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	common_datalayer "github.com/mimiro-io/common-datalayer"
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -255,21 +256,31 @@ func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo)
 	return nil
 }
 
+const (
+	TableName   = "table_name"
+	Schema      = "schema"
+	Database    = "database"
+	RawColumn   = "raw_column"
+	DefaultType = "default_type"
+)
+
 // if there is no read config for the given dataset name, make an attempt
 // to interpret the dataset name string as table spec.
-func implicitMapping(name string) (DatasetDefinition, error) {
+func implicitMapping(name string) (*common_datalayer.DatasetDefinition, error) {
 	tokens := strings.Split(name, ".")
 	if len(tokens) == 3 {
-		return DatasetDefinition{
+		return &common_datalayer.DatasetDefinition{
 			DatasetName: name,
-			SourceConfiguration: SourceConfiguration{
+			SourceConfig: map[string]any{
 				TableName: tokens[2],
 				Schema:    tokens[1],
 				Database:  tokens[0],
 				RawColumn: "ENTITY",
 			},
-			Mappings: nil,
+
+			IncomingMappingConfig: nil,
+			OutgoingMappingConfig: &common_datalayer.OutgoingMappingConfig{},
 		}, nil
 	}
-	return DatasetDefinition{}, fmt.Errorf("%w %s. expected database.schema.table format", ErrNoImplicitDataset, name)
+	return nil, fmt.Errorf("%w %s. expected database.schema.table format", ErrNoImplicitDataset, name)
 }

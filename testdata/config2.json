@@ -1,8 +1,8 @@
 {
   "dataset_definitions": [
     {
-      "dataset_name": "huzzah",
-      "source_configuration": {
+      "name": "huzzah",
+      "source_config": {
         "table_name": "huzzah",
         "schema": "datahub",
         "database": "default",
@@ -11,8 +11,8 @@
       }
     },
     {
-      "dataset_name": "hooray",
-      "source_configuration": {
+      "name": "hooray",
+      "source_config": {
         "table_name": "hooray",
         "schema_name": "datahub",
         "database_name": "default",

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/bfontaine/jsons"
+	common_datalayer "github.com/mimiro-io/common-datalayer"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
 	"github.com/mimiro-io/internal-go-util/pkg/uda"
 	"github.com/rs/zerolog"
 	gsf "github.com/snowflakedb/gosnowflake"
@@ -386,21 +389,28 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 	return tx.Commit()
 }
 
-func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping DatasetDefinition) error {
+func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping *common_datalayer.DatasetDefinition) error {
 	var err error
 	var rows *sql.Rows
 	var query string
-	if mapping.IsRaw() {
+	if mapping.SourceConfig[RawColumn] != nil {
 		query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
-			mapping.SourceConfiguration.RawColumn,
-			mapping.SourceConfiguration.Database,
-			mapping.SourceConfiguration.Schema,
-			mapping.SourceConfiguration.TableName)
-	} else if mapping.SourceConfiguration.MapAll {
+			mapping.SourceConfig[RawColumn],
+			mapping.SourceConfig[Database],
+			mapping.SourceConfig[Schema],
+			mapping.SourceConfig[TableName])
+	} else if mapping.OutgoingMappingConfig.MapAll {
 		query = fmt.Sprintf("SELECT * FROM %s.%s.%s",
-			mapping.SourceConfiguration.Database,
-			mapping.SourceConfiguration.Schema,
-			mapping.SourceConfiguration.TableName)
+			mapping.SourceConfig[Database],
+			mapping.SourceConfig[Schema],
+			mapping.SourceConfig[TableName])
+	} else {
+		query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
+			cols(mapping.OutgoingMappingConfig),
+			mapping.SourceConfig[Database],
+			mapping.SourceConfig[Schema],
+			mapping.SourceConfig[TableName])
+
 	}
 	qctx := gsf.WithStreamDownloader(ctx)
 	rows, err = p.db.QueryContext(qctx, query)
@@ -409,37 +419,64 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 		return err
 	}
 	defer rows.Close()
-	if err != nil {
-		sf.log.Error().Err(err).Msg("Failed to query snowflake")
-		return err
-	}
 
 	var headerWritten bool
+
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		sf.log.Error().Err(err).Msg("Failed to access query result column types")
+		return err
+	}
+	rowLine := make([]any, len(colTypes))
+
+	mapper := common_datalayer.NewMapper(
+		nil, nil, mapping.OutgoingMappingConfig)
+
 	for rows.Next() {
 		if !headerWritten {
 			_, err = fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {
-"_": "http://snowflake/%s/%s/%s",
+"_": "http://snowflake/%s/%s/%s/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-}}`, mapping.SourceConfiguration.Database, mapping.SourceConfiguration.Schema, mapping.SourceConfiguration.TableName)
+}}`, mapping.SourceConfig[Database], mapping.SourceConfig[Schema], mapping.SourceConfig[TableName])
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to write context")
 				return err
 			}
 			headerWritten = true
 		}
-		var entity string
-		err = rows.Scan(&entity)
+
+		for i, _ := range colTypes {
+			rowLine[i] = new(any)
+		}
+
+		err = rows.Scan(rowLine...)
 		if err != nil {
 			sf.log.Error().Err(err).Msg("Failed to scan row")
 			return err
 		}
-		_, err = writer.Write([]byte(",\n" + entity))
-		if err != nil {
-			sf.log.Error().Err(err).Msg("Failed to write row")
-			return err
+		var jsonEntity string
+		if mapping.SourceConfig[RawColumn] != nil {
+			jsonEntity = (*rowLine[0].(*any)).(string)
+		} else {
+			entity := egdm.NewEntity()
+			err = mapper.MapItemToEntity(rowItem(rowLine, colTypes), entity)
+			if err != nil {
+				sf.log.Error().Err(err).Msg("Failed to map row")
+				return err
+			}
+			jsonBytes, err2 := json.Marshal(entity)
+			if err2 != nil {
+				return err2
+			}
+			jsonEntity = string(jsonBytes)
+		}
+		_, err2 := writer.Write([]byte(",\n" + jsonEntity))
+		if err2 != nil {
+			sf.log.Error().Err(err2).Msg("Failed to write row")
+			return err2
 		}
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		sf.log.Error().Err(err).Msg("Failed to read rows")
 		return err
 	}
@@ -448,4 +485,45 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 		return err
 	}
 	return nil
+}
+
+type rItem struct {
+	line []any
+	cols []string
+}
+
+func (r rItem) GetValue(name string) any {
+	for i, col := range r.cols {
+		if col == name {
+			val := *r.line[i].(*any)
+			return val
+		}
+	}
+	return nil
+}
+
+func (r rItem) GetPropertyNames() []string {
+	return r.cols
+}
+
+func (r rItem) SetValue(name string, value any) { panic("implement me") }
+func (r rItem) NativeItem() any                 { panic("implement me") }
+
+func rowItem(line []any, types []*sql.ColumnType) common_datalayer.Item {
+	colNames := make([]string, len(types))
+	for i, t := range types {
+		colNames[i] = t.Name()
+	}
+	return rItem{line: line, cols: colNames}
+}
+
+func cols(config *common_datalayer.OutgoingMappingConfig) string {
+	res := ""
+	for _, mapping := range config.PropertyMappings {
+		if len(res) > 0 {
+			res = res + ", "
+		}
+		res = res + mapping.Property
+	}
+	return res
 }
