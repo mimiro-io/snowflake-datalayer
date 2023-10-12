@@ -6,8 +6,7 @@
         "table_name": "ns_huzzah",
         "schema": "datahub",
         "database": "raw",
-        "raw_column": "DB_ENTITY",
-        "default_type": "http://data.mimiro.io/Enthusiasm"
+        "raw_column": "DB_ENTITY"
       }
     }
   ]

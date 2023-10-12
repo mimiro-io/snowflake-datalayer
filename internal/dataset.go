@@ -257,11 +257,11 @@ func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo)
 }
 
 const (
-	TableName   = "table_name"
-	Schema      = "schema"
-	Database    = "database"
-	RawColumn   = "raw_column"
-	DefaultType = "default_type"
+	TableName = "table_name"
+	Schema    = "schema"
+	Database  = "database"
+	RawColumn = "raw_column"
+	//DefaultType = "default_type"
 )
 
 // if there is no read config for the given dataset name, make an attempt

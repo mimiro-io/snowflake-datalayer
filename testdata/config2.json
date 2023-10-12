@@ -6,18 +6,34 @@
         "table_name": "huzzah",
         "schema": "datahub",
         "database": "default",
-        "raw_column": "DB_ENTITY",
-        "default_type": "http://data.mimiro.io/Enthusiasm"
+        "raw_column": "DB_ENTITY"
       }
     },
     {
       "name": "hooray",
       "source_config": {
         "table_name": "hooray",
-        "schema_name": "datahub",
-        "database_name": "default",
-        "raw_column": "raw",
-        "default_type": "http://data.mimiro.io/Enthusiasm"
+        "schema": "datahub",
+        "database": "default"
+      },
+      "outgoing_mapping_config": {
+        "base_uri": "http://example.com",
+        "constructions": [{
+          "property": "name",
+          "operation": "replace",
+          "args": ["arg1", "arg2", "arg3"]
+        }],
+        "property_mappings": [{
+         "required": true,
+         "entity_property": "http://example.com/name",
+         "property": "name",
+         "datatype": "string",
+         "is_reference": true,
+         "uri_value_pattern": "http://example.com/{value}",
+         "is_identity": false,
+         "default_value": "default"
+        }],
+        "map_all": true
       }
     }
   ]

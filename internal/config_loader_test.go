@@ -40,7 +40,7 @@ var _ = Describe("The config loader", func() {
 		Expect(cfg.DsMappings[0].SourceConfig[Schema]).To(Equal("datahub"))
 		Expect(cfg.DsMappings[0].SourceConfig[Database]).To(Equal("raw"))
 		Expect(cfg.DsMappings[0].SourceConfig[RawColumn]).To(Equal("DB_ENTITY"))
-		Expect(cfg.DsMappings[0].SourceConfig[DefaultType]).To(Equal("http://data.mimiro.io/Enthusiasm"))
+		//Expect(cfg.DsMappings[0].SourceConfig[DefaultType]).To(Equal("http://data.mimiro.io/Enthusiasm"))
 	})
 
 	It("should unpack datahub content format", func() {
