@@ -9,7 +9,7 @@ import (
 var _ = Describe("The config loader", func() {
 	It("should load config", func() {
 		c := &ConfigLoader{}
-		//LoadLogger("console", "test", "debug")
+		// LoadLogger("console", "test", "debug")
 		c.loadConfig = c.loadFile
 		cfg := &Config{ConfigLocation: "../testdata/config.json"}
 		res := c.update(cfg)
@@ -28,7 +28,7 @@ var _ = Describe("The config loader", func() {
 
 	It("should map all fields correctly", func() {
 		c := &ConfigLoader{}
-		//LoadLogger("console", "test", "debug")
+		// LoadLogger("console", "test", "debug")
 		c.loadConfig = c.loadFile
 		cfg := &Config{ConfigLocation: "../testdata/config.json"}
 		res := c.update(cfg)
@@ -40,12 +40,12 @@ var _ = Describe("The config loader", func() {
 		Expect(cfg.DsMappings[0].SourceConfig[Schema]).To(Equal("datahub"))
 		Expect(cfg.DsMappings[0].SourceConfig[Database]).To(Equal("raw"))
 		Expect(cfg.DsMappings[0].SourceConfig[RawColumn]).To(Equal("DB_ENTITY"))
-		//Expect(cfg.DsMappings[0].SourceConfig[DefaultType]).To(Equal("http://data.mimiro.io/Enthusiasm"))
+		// Expect(cfg.DsMappings[0].SourceConfig[DefaultType]).To(Equal("http://data.mimiro.io/Enthusiasm"))
 	})
 
 	It("should unpack datahub content format", func() {
 		c := &ConfigLoader{}
-		//LoadLogger("console", "test", "debug")
+		// LoadLogger("console", "test", "debug")
 		c.loadConfig = c.loadFile
 		cfg := &Config{ConfigLocation: "../testdata/content.json"}
 		res := c.update(cfg)
@@ -56,3 +56,4 @@ var _ = Describe("The config loader", func() {
 		Expect(cfg.DsMappings[0].SourceConfig[TableName]).To(Equal("customers"))
 	})
 })
+

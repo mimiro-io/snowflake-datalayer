@@ -12,10 +12,7 @@ import (
 )
 
 var LoggerSkipper = func(e echo.Context) bool {
-	if e.Request().URL.Path == "/health" {
-		return true
-	}
-	return false
+	return e.Request().URL.Path == "/health"
 }
 
 type LoggerConfig struct {

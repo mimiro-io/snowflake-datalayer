@@ -6,7 +6,8 @@
         "table_name": "ns_huzzah",
         "schema": "datahub",
         "database": "raw",
-        "raw_column": "DB_ENTITY"
+        "raw_column": "DB_ENTITY",
+        "since_column": "DB_LAST_UPDATED"
       }
     }
   ]

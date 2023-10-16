@@ -18,7 +18,7 @@ type Dataset struct {
 	log  zerolog.Logger
 	sf   *Snowflake
 	lock sync.Mutex
-	//m    statsd.ClientInterface
+	// m    statsd.ClientInterface
 }
 
 func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
@@ -26,30 +26,34 @@ func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
 		cfg: cfg,
 		log: LOG.With().Str("logger", "dataset").Logger(),
 		sf:  sf,
-		//m:   m,
+		// m:   m,
 	}
 }
 
 func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) error {
 	var stage string
-	if info.fsStart && info.fsId != "" {
+	if info.fsStart && info.fsID != "" {
 		var err error
-		stage, err = ds.sf.mkStage(info.fsId, info.name)
+		stage, err = ds.sf.mkStage(info.fsID, info.name)
 		if err != nil {
 			refreshed, err2 := ds.tryRefresh(err)
 			if err2 != nil {
 				return err2
 			}
 			if refreshed {
-				stage, err = ds.sf.mkStage(info.fsId, info.name)
+				stage, err = ds.sf.mkStage(info.fsID, info.name)
+				if err != nil {
+					ds.log.Error().Err(err).Str("stage", stage).Msg("Failed to create stage, even after login refresh")
+					return err
+				}
 			} else {
-				ds.log.Error().Str("stage", stage).Msg("Failed to create stage, even after login refresh")
+				ds.log.Error().Err(err).Str("stage", stage).Msg("Failed to create stage, tis is not a refresh issue")
 				return err
 			}
 		}
 		ds.log.Info().Str("stage", stage).Msg("Created stage")
 	} else {
-		stage = ds.sf.getStage(info.fsId, info.name)
+		stage = ds.sf.getStage(info.fsID, info.name)
 	}
 	var batchSize int64 = 50000
 	if s, ok := ctx.Value("batchSize").(int64); ok {
@@ -72,8 +76,7 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 				read++
 			}
 			if read == batchSize {
-				var err error
-				err = ds.safePut(info.name, stage, entityContext, entities)
+				err := ds.safePut(info.name, stage, entityContext, entities)
 				if err != nil {
 					return err
 				}
@@ -176,17 +179,15 @@ func (ds *Dataset) safePut(dataset string, stage string, entityContext *uda.Cont
 		}
 		if refreshed {
 			if _, err3 := ds.sf.putEntities(dataset, stage, entities, entityContext); err3 != nil {
-				if err3 != nil {
-					return err3 // give up at this point
-				}
+				return err3 // give up at this point
 			}
-
 		} else {
 			return err
 		}
 	}
 	return nil
 }
+
 func (ds *Dataset) safeEnsureStageAndPut(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity, files []string) (int64, []*Entity, []string, error) {
 	if f, err := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err != nil {
 		refreshed, err2 := ds.tryRefresh(err)
@@ -195,14 +196,11 @@ func (ds *Dataset) safeEnsureStageAndPut(ctx context.Context, dataset string, en
 			return 0, nil, nil, err2
 		}
 		if refreshed {
-			if f, err3 := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err3 != nil {
-				if err3 != nil {
-					return 0, nil, nil, err3 // give up at this point
-				}
+			if f2, err3 := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err3 != nil {
+				return 0, nil, nil, err3 // give up at this point
 			} else {
-				files = append(files, f...)
+				files = append(files, f2...)
 			}
-
 		} else {
 			return 0, nil, nil, err
 		}
@@ -257,11 +255,12 @@ func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo)
 }
 
 const (
-	TableName = "table_name"
-	Schema    = "schema"
-	Database  = "database"
-	RawColumn = "raw_column"
-	//DefaultType = "default_type"
+	TableName   = "table_name"
+	Schema      = "schema"
+	Database    = "database"
+	RawColumn   = "raw_column"
+	SinceColumn = "since_column"
+	// DefaultType = "default_type"
 )
 
 // if there is no read config for the given dataset name, make an attempt

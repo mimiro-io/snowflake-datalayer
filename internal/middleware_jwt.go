@@ -138,7 +138,6 @@ func (config *JwtConfig) validateToken(auth string) (*jwt.Token, *CustomClaims, 
 			return nil, errors.New("unknown type in well-known cache")
 		}
 	})
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -177,3 +176,4 @@ func extractToken(c echo.Context) (string, error) {
 	}
 	return "", ErrJWTMissing
 }
+

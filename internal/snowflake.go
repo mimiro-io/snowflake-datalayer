@@ -51,11 +51,11 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 			return nil, err
 		}
 		parsedKey := parsedKey8.(*rsa.PrivateKey)
-		//privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
+		// privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
 		config := &gsf.Config{
 			Account:       cfg.SnowflakeAccount,
 			User:          cfg.SnowflakeUser,
-			Database:      cfg.SnowflakeDb,
+			Database:      cfg.SnowflakeDB,
 			Schema:        cfg.SnowflakeSchema,
 			Warehouse:     cfg.SnowflakeWarehouse,
 			Region:        "eu-west-1",
@@ -68,10 +68,10 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 		}
 		connectionString = s
 	} else {
-		if cfg.SnowflakeUri != "" {
-			connectionString = fmt.Sprintf(connectionString, cfg.SnowflakeUser, cfg.SnowflakePassword, cfg.SnowflakeUri)
+		if cfg.SnowflakeURI != "" {
+			connectionString = fmt.Sprintf(connectionString, cfg.SnowflakeUser, cfg.SnowflakePassword, cfg.SnowflakeURI)
 		} else {
-			uri := fmt.Sprintf("%s/%s/%s", cfg.SnowflakeAccount, cfg.SnowflakeDb, cfg.SnowflakeSchema)
+			uri := fmt.Sprintf("%s/%s/%s", cfg.SnowflakeAccount, cfg.SnowflakeDB, cfg.SnowflakeSchema)
 			connectionString = fmt.Sprintf(connectionString, cfg.SnowflakeUser, cfg.SnowflakePassword, uri)
 		}
 	}
@@ -202,7 +202,7 @@ func (sf *Snowflake) gzippedNDJson(file io.Writer, entities []*Entity, entityCon
 func (sf *Snowflake) getStage(fsId string, dataset string) string {
 	dsName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	stage := fmt.Sprintf("%s.%s.S_%s",
-		strings.ToUpper(sf.cfg.SnowflakeDb),
+		strings.ToUpper(sf.cfg.SnowflakeDB),
 		strings.ToUpper(sf.cfg.SnowflakeSchema),
 		dsName)
 	fsSuffix := fmt.Sprintf("_FSID_%s", fsId)
@@ -213,16 +213,16 @@ func (sf *Snowflake) getStage(fsId string, dataset string) string {
 func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 	dsName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	stage := fmt.Sprintf("%s.%s.S_%s",
-		strings.ToUpper(sf.cfg.SnowflakeDb),
+		strings.ToUpper(sf.cfg.SnowflakeDB),
 		strings.ToUpper(sf.cfg.SnowflakeSchema),
 		dsName)
 
 	if fsId != "" {
 		sf.log.Info().Msg("Full sync requested for " + dsName + ", id " + fsId)
 		fsSuffix := fmt.Sprintf("_FSID_%s", fsId)
-		query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + sf.cfg.SnowflakeDb + "." + sf.cfg.SnowflakeSchema
+		query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + sf.cfg.SnowflakeDB + "." + sf.cfg.SnowflakeSchema
 		query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
-		//println(query)
+		// println(query)
 		ctx, err := gsf.WithMultiStatement(context.Background(), 2)
 		if err != nil {
 			sf.log.Error().Err(err).Msg("Failed to create multistatement context")
@@ -248,7 +248,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 				}
 			}
 			sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
-			stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDb, sf.cfg.SnowflakeSchema, existingFsStage)
+			stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDB, sf.cfg.SnowflakeSchema, existingFsStage)
 			_, err = p.db.Exec(stmt)
 			if err != nil {
 				sf.log.Error().Err(err).Str("statement", stmt).Msg("Failed to drop previous full sync stage")
@@ -275,7 +275,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 }
 
 func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) error {
-	nameSpace := fmt.Sprintf("%s.%s", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema))
+	nameSpace := fmt.Sprintf("%s.%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema))
 	stage := fmt.Sprintf("%s.S_", nameSpace) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 	tableName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
 
@@ -312,7 +312,7 @@ func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) 
 			'%s'::varchar,
  			$1::variant
 	    	FROM @%s)
-	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP) 
+	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP)
 	FILES = (%s);
 	`, nameSpace, tableName, batchTimestamp, dataset, stage, fileString)
 	sf.log.Trace().Msg(q)
@@ -325,7 +325,7 @@ func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) 
 
 func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int64) error {
 	tableName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-	tableName = fmt.Sprintf("%s.%s.%s", strings.ToUpper(sf.cfg.SnowflakeDb), strings.ToUpper(sf.cfg.SnowflakeSchema), tableName)
+	tableName = fmt.Sprintf("%s.%s.%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema), tableName)
 	loadTableName := stage
 
 	tx, err := p.db.Begin()
@@ -344,7 +344,7 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
   		entity variant);
 	`, loadTableName)
 
-	//println("\n", smt)
+	// println("\n", smt)
 	if _, err := tx.Exec(smt); err != nil {
 		return err
 	}
@@ -393,25 +393,69 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 	var err error
 	var rows *sql.Rows
 	var query string
-	if mapping.SourceConfig[RawColumn] != nil {
-		query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
-			mapping.SourceConfig[RawColumn],
-			mapping.SourceConfig[Database],
-			mapping.SourceConfig[Schema],
-			mapping.SourceConfig[TableName])
+	columns := ""
+	sinceColumn, sinceActive := mapping.SourceConfig[SinceColumn]
+
+	if colval, ok := mapping.SourceConfig[RawColumn]; ok {
+		columns = colval.(string)
 	} else if mapping.OutgoingMappingConfig.MapAll {
-		query = fmt.Sprintf("SELECT * FROM %s.%s.%s",
-			mapping.SourceConfig[Database],
-			mapping.SourceConfig[Schema],
-			mapping.SourceConfig[TableName])
+		columns = "*"
 	} else {
-		query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
-			cols(mapping.OutgoingMappingConfig),
+		columns = cols(mapping.OutgoingMappingConfig)
+	}
+
+	// if a since is given, build a between where clause
+	sinceVal, err := base64.URLEncoding.DecodeString(info.since)
+	if err != nil {
+		sf.log.Error().Err(err).Msg("Failed to decode since token")
+		return err
+	}
+	token := info.since
+	newSince := ""
+	if sinceActive {
+
+		var res any
+		maxQ := fmt.Sprintf("SELECT MAX(%s) FROM %s.%s.%s",
+			sinceColumn,
 			mapping.SourceConfig[Database],
 			mapping.SourceConfig[Schema],
 			mapping.SourceConfig[TableName])
 
+		if info.since != "" {
+			maxQ = fmt.Sprintf("%s WHERE %s > %s", maxQ, sinceColumn, sinceVal)
+		}
+		sf.log.Debug().Msg(maxQ)
+		row := p.db.QueryRowContext(ctx, maxQ)
+		if row.Err() != nil {
+			sf.log.Error().Err(row.Err()).Msg("Failed to read new since value")
+			return row.Err()
+		}
+		row.Scan(&res)
+
+		if res == nil {
+			res = string(sinceVal)
+		}
+		newSince = fmt.Sprintf("%v", res)
+		token = base64.URLEncoding.EncodeToString([]byte(newSince))
 	}
+
+	query = fmt.Sprintf("SELECT %s FROM %s.%s.%s",
+		columns,
+		mapping.SourceConfig[Database],
+		mapping.SourceConfig[Schema],
+		mapping.SourceConfig[TableName])
+
+	if sinceActive {
+		if info.since != "" {
+			query = fmt.Sprintf("%s WHERE %s > %s and %s <= %s", query, sinceColumn, sinceVal, sinceColumn, newSince)
+		} else {
+			// without since, just cap query
+			query = fmt.Sprintf("%s WHERE %s <= %s", query, sinceColumn, newSince)
+		}
+
+	}
+
+	sf.log.Debug().Msg(query)
 	qctx := gsf.WithStreamDownloader(ctx)
 	rows, err = p.db.QueryContext(qctx, query)
 	if err != nil {
@@ -433,19 +477,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 		nil, nil, mapping.OutgoingMappingConfig)
 
 	for rows.Next() {
-		if !headerWritten {
-			_, err = fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {
-"_": "http://snowflake/%s/%s/%s/",
-"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-}}`, mapping.SourceConfig[Database], mapping.SourceConfig[Schema], mapping.SourceConfig[TableName])
-			if err != nil {
-				sf.log.Error().Err(err).Msg("Failed to write context")
-				return err
-			}
-			headerWritten = true
-		}
-
-		for i, _ := range colTypes {
+		for i := range colTypes {
 			rowLine[i] = new(any)
 		}
 
@@ -470,9 +502,20 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			}
 			jsonEntity = string(jsonBytes)
 		}
-		_, err2 := writer.Write([]byte(",\n" + jsonEntity))
+
+		// pushed writing of header as far back as possible, so that errors before this point still can influnce http status code
+		if !headerWritten {
+			err2 := sf.writeHeader(writer, mapping)
+			if err2 != nil {
+				return err2
+			}
+
+			headerWritten = true
+		}
+
+		_, err2 := fmt.Fprint(writer, ",\n"+jsonEntity)
 		if err2 != nil {
-			sf.log.Error().Err(err2).Msg("Failed to write row")
+			sf.log.Error().Err(err2).Msg("Failed to write entity to http writer")
 			return err2
 		}
 	}
@@ -480,8 +523,34 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 		sf.log.Error().Err(err).Msg("Failed to read rows")
 		return err
 	}
+
+	// when there was an empty result, we still need to write the header
+	if !headerWritten {
+		err := sf.writeHeader(writer, mapping)
+		if err != nil {
+			return err
+		}
+	}
+	// append continuation token if sinceActive
+	if sinceActive {
+		_, err = fmt.Fprintf(writer, `, {"id": "@continuation", "token": "%s"}`, token)
+	}
+
+	// close batch
 	_, err = fmt.Fprintln(writer, "]")
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sf *Snowflake) writeHeader(writer io.Writer, mapping *common_datalayer.DatasetDefinition) error {
+	_, err := fmt.Fprintf(writer, `[{"id": "@context", "namespaces": {
+"_": "http://snowflake/%s/%s/%s/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}}`, mapping.SourceConfig[Database], mapping.SourceConfig[Schema], mapping.SourceConfig[TableName])
+	if err != nil {
+		sf.log.Error().Err(err).Msg("Failed to write context")
 		return err
 	}
 	return nil
@@ -514,6 +583,7 @@ func rowItem(line []any, types []*sql.ColumnType) common_datalayer.Item {
 	for i, t := range types {
 		colNames[i] = t.Name()
 	}
+
 	return rItem{line: line, cols: colNames}
 }
 

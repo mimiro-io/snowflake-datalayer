@@ -40,14 +40,13 @@ var _ = Describe("The web server", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		go func() {
-			server.E.Start(":17866")
+			_ = server.E.Start(":17866")
 		}()
-
 	})
 	AfterEach(func() {
 		Expect(mock.ExpectationsWereMet()).To(BeNil())
-		db.Close()
-		server.E.Shutdown(context.Background())
+		_ = db.Close()
+		_ = server.E.Shutdown(context.Background())
 	})
 	Context("when getting entities with no-config (implicit) dataset names", func() {
 		It("should return 200 if table found", func() {
@@ -88,9 +87,9 @@ var _ = Describe("The web server", func() {
 			resp, err := http.Get("http://localhost:17866/datasets/foo.bar.notfound/entities")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode).To(Equal(500))
-			//bodyBytes, err := io.ReadAll(resp.Body)
-			//Expect(err).NotTo(HaveOccurred())
-			//Expect(string(bodyBytes)).To(Equal("{\"message\":\"Failed to query snowflake\"}\n"))
+			// bodyBytes, err := io.ReadAll(resp.Body)
+			// Expect(err).NotTo(HaveOccurred())
+			// Expect(string(bodyBytes)).To(Equal("{\"message\":\"Failed to query snowflake\"}\n"))
 		})
 	})
 	Context("when getting entities with configured (explicit) dataset names", func() {
@@ -118,13 +117,121 @@ var _ = Describe("The web server", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			// GinkgoLogr.Info(string(bodyBytes))
 			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
 "_": "http://snowflake/foo/bar/baz/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 }},
 {"id": "1", "props": {"foo": "bar"}, "refs": {}},
 {"id": "2", "props": {"foo": "bar2"}, "refs":{}}]
+`))
+		})
+		It("should return a continuation token when since column is configured", func() {
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "cucumber",
+					SourceConfig: map[string]any{
+						TableName:   "baz",
+						Schema:      "bar",
+						Database:    "foo",
+						RawColumn:   "ENTITY",
+						SinceColumn: "ts",
+					},
+				},
+			}
+
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}).AddRow(165565655567))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts <= 165565655567").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}).
+					AddRow(`{"id": "1", "props": {"foo": "bar"}, "refs": {}}`).
+					AddRow(`{"id": "2", "props": {"foo": "bar2"}, "refs":{}}`),
+				)
+
+			resp, err := http.Get("http://localhost:17866/datasets/cucumber/entities")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			bodyBytes, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			//GinkgoLogr.Info(string(bodyBytes))
+			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
+"_": "http://snowflake/foo/bar/baz/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "1", "props": {"foo": "bar"}, "refs": {}},
+{"id": "2", "props": {"foo": "bar2"}, "refs":{}}, {"id": "@continuation", "token": "MTY1NTY1NjU1NTY3"}]
+`))
+		})
+		It("should apply since tokens in where clause", func() {
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "cucumber",
+					SourceConfig: map[string]any{
+						TableName:   "baz",
+						Schema:      "bar",
+						Database:    "foo",
+						RawColumn:   "ENTITY",
+						SinceColumn: "ts",
+					},
+				},
+			}
+
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz WHERE ts > 165565655567").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}).AddRow(165565655568))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts > 165565655567 and ts <= 165565655568").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}).
+					AddRow(`{"id": "3", "props": {}, "refs": {}}`),
+				)
+
+			resp, err := http.Get("http://localhost:17866/datasets/cucumber/entities?since=MTY1NTY1NjU1NTY3")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			bodyBytes, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			//GinkgoLogr.Info(string(bodyBytes))
+			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
+"_": "http://snowflake/foo/bar/baz/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "3", "props": {}, "refs": {}}, {"id": "@continuation", "token": "MTY1NTY1NjU1NTY4"}]
+`))
+		})
+		It("should apply since tokens in where clause and return it again when nothing found", func() {
+			cfg.DsMappings = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "cucumber",
+					SourceConfig: map[string]any{
+						TableName:   "baz",
+						Schema:      "bar",
+						Database:    "foo",
+						RawColumn:   "ENTITY",
+						SinceColumn: "ts",
+					},
+				},
+			}
+
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz WHERE ts > 165565655567").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts > 165565655567 and ts <= 165565655567").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}),
+				)
+
+			resp, err := http.Get("http://localhost:17866/datasets/cucumber/entities?since=MTY1NTY1NjU1NTY3")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			bodyBytes, err := io.ReadAll(resp.Body)
+			Expect(err).NotTo(HaveOccurred())
+			GinkgoLogr.Info(string(bodyBytes))
+			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
+"_": "http://snowflake/foo/bar/baz/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}}, {"id": "@continuation", "token": "MTY1NTY1NjU1NTY3"}]
 `))
 		})
 	})
@@ -148,30 +255,31 @@ var _ = Describe("The web server", func() {
 							Operation:    "replace",
 							Arguments:    []string{"origin", " ", "_"},
 						}},
-						PropertyMappings: []*common_datalayer.ItemToEntityPropertyMapping{{
-							Required:        true,
-							Property:        "id",
-							Datatype:        "string",
-							IsIdentity:      true,
-							URIValuePattern: "http://banana/test/id/{value}",
-						}, {
-							Property:       "name",
-							EntityProperty: "Name",
-						}, {
-							Property:       "color",
-							EntityProperty: "Color",
-						}, {
-							Property:        "origin",
-							EntityProperty:  "From",
-							IsReference:     true,
-							URIValuePattern: "http://banana/test/origin/{value}",
-						}, {
-							Property:       "amt",
-							EntityProperty: "Amount",
-						}, {
-							Property:       "for_sale",
-							EntityProperty: "ForSale",
-						},
+						PropertyMappings: []*common_datalayer.ItemToEntityPropertyMapping{
+							{
+								Required:        true,
+								Property:        "id",
+								Datatype:        "string",
+								IsIdentity:      true,
+								URIValuePattern: "http://banana/test/id/{value}",
+							}, {
+								Property:       "name",
+								EntityProperty: "Name",
+							}, {
+								Property:       "color",
+								EntityProperty: "Color",
+							}, {
+								Property:        "origin",
+								EntityProperty:  "From",
+								IsReference:     true,
+								URIValuePattern: "http://banana/test/origin/{value}",
+							}, {
+								Property:       "amt",
+								EntityProperty: "Amount",
+							}, {
+								Property:       "for_sale",
+								EntityProperty: "ForSale",
+							},
 						},
 						MapAll: false,
 					},
@@ -188,7 +296,7 @@ var _ = Describe("The web server", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			// GinkgoLogr.Info(string(bodyBytes))
 			nsm := egdm.NewNamespaceContext()
 			parser := egdm.NewEntityParser(nsm).WithExpandURIs()
 			coll, err := parser.LoadEntityCollection(strings.NewReader(string(bodyBytes)))
@@ -263,7 +371,7 @@ var _ = Describe("The web server", func() {
 
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			// GinkgoLogr.Info(string(bodyBytes))
 			nsm := egdm.NewNamespaceContext()
 			parser := egdm.NewEntityParser(nsm).WithExpandURIs()
 			coll, err := parser.LoadEntityCollection(strings.NewReader(string(bodyBytes)))
@@ -287,7 +395,6 @@ var _ = Describe("The web server", func() {
 			Expect(e.Properties["http://banana/test/for_sale"]).To(Equal(false))
 			Expect(e.References).To(HaveLen(1))
 			Expect(e.References["http://banana/test/From"]).To(Equal("http://banana/test/origin/Costa_Rica"))
-
 		})
 	})
 	Context("when posting entities in incremental mode", func() {
@@ -325,7 +432,7 @@ var _ = Describe("The web server", func() {
 			Expect(err).NotTo(HaveOccurred())
 			bytes, err := io.ReadAll(r)
 			Expect(err).NotTo(HaveOccurred())
-			//println(string(bytes))
+			// println(string(bytes))
 			Expect(string(bytes)).To(Equal(
 				`{"id":"http://snowflake/foo/1","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
 {"id":"http://snowflake/foo/2","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
