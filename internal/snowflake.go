@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bfontaine/jsons"
 	common_datalayer "github.com/mimiro-io/common-datalayer"
@@ -77,7 +78,13 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 	}
 
 	if p == nil || p.db == nil {
+		LOG.Info().Msg("opening db")
 		db, err := sql.Open("snowflake", connectionString)
+		// snowflake tokens time out, after 4 hours with default session settings.
+		// if we do not evict idle connections, we will get errors after 4 hours
+		db.SetConnMaxIdleTime(30 * time.Second)
+		db.SetConnMaxLifetime(1 * time.Hour)
+
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +93,7 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 			db: db,
 		}
 	}
+	LOG.Info().Msg(fmt.Sprintf("start or refresh happening. database connection stats: %+v", p.db.Stats()))
 	_, err := p.db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
 	if err != nil {
 		return nil, err
@@ -452,7 +460,6 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			// without since, just cap query
 			query = fmt.Sprintf("%s WHERE %s <= %s", query, sinceColumn, newSince)
 		}
-
 	}
 
 	sf.log.Debug().Msg(query)
