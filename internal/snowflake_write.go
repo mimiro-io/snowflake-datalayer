@@ -9,14 +9,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/mimiro-io/internal-go-util/pkg/uda"
 
 	"github.com/bfontaine/jsons"
 	"github.com/rs/zerolog"
@@ -105,23 +104,6 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 	}, nil
 }
 
-// EnsureStageAndPut returns a list of already uploaded files to be loaded into snowflake, Load must be called subsequently to finnish the process
-func (sf *Snowflake) EnsureStageAndPut(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity) ([]string, error) {
-	// by starting with the sql before creating any files, then if no session is valid, we should prevent creating files we won't use
-	// as it fails early
-	stage, err := sf.mkStage("", dataset)
-	if err != nil {
-		return nil, err
-	}
-
-	files, err2 := sf.putEntities(dataset, stage, entities, entityContext)
-	if err2 != nil {
-		return nil, err2
-	}
-
-	return files, nil
-}
-
 func newTmpFileWriter(dataset string) (*os.File, error, func()) {
 	file, err := os.CreateTemp("", dataset)
 	if err != nil {
@@ -131,7 +113,7 @@ func newTmpFileWriter(dataset string) (*os.File, error, func()) {
 	return file, nil, finally
 }
 
-func (sf *Snowflake) putEntities(dataset string, stage string, entities []*Entity, entityContext *uda.Context) ([]string, error) {
+func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.Entity) ([]string, error) {
 	return withRefresh(sf, func() ([]string, error) {
 		// we will handle snowflake in 2 steps, first write each batch as a ndjson file
 		file, err, cleanTmpFile := sf.NewTmpFile(dataset)
@@ -140,7 +122,7 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*Entit
 		}
 		defer cleanTmpFile()
 
-		err = sf.gzippedNDJson(file, entities, entityContext, dataset)
+		err = sf.gzippedNDJson(file, entities, dataset)
 		if err != nil {
 			return nil, err
 		}
@@ -160,45 +142,10 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*Entit
 	})
 }
 
-func (sf *Snowflake) gzippedNDJson(file io.Writer, entities []*Entity, entityContext *uda.Context, dataset string) error {
+func (sf *Snowflake) gzippedNDJson(file io.Writer, entities []*egdm.Entity, dataset string) error {
 	zipWriter := gzip.NewWriter(file)
 	j := jsons.NewWriter(zipWriter)
 	for _, entity := range entities {
-		entity.ID = uda.ToURI(entityContext, entity.ID)
-		entity.Dataset = dataset
-
-		// do references
-		newRefs := make(map[string]any)
-		for refKey, refValue := range entity.References {
-			// we need to do both key and value replacing
-			key := uda.ToURI(entityContext, refKey)
-			switch values := refValue.(type) {
-			case []any:
-				var newValues []string
-				for _, val := range values {
-					newValues = append(newValues, uda.ToURI(entityContext, val.(string)))
-				}
-				newRefs[key] = newValues
-			case []string:
-				var newValues []string
-				for _, val := range values {
-					newValues = append(newValues, uda.ToURI(entityContext, val))
-				}
-				newRefs[key] = newValues
-			default:
-				newRefs[key] = uda.ToURI(entityContext, refValue.(string))
-			}
-		}
-		entity.References = newRefs
-
-		// do preferences
-		newProps := make(map[string]any)
-		for refKey, refValue := range entity.Properties {
-			key := uda.ToURI(entityContext, refKey)
-			newProps[key] = refValue
-		}
-		entity.Properties = newProps
-
 		err := j.Add(entity)
 		if err != nil {
 			return err

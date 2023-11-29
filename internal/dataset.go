@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	common_datalayer "github.com/mimiro-io/common-datalayer"
-	"github.com/mimiro-io/internal-go-util/pkg/uda"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
 	"github.com/rs/zerolog"
 	"io"
 	"strings"
@@ -44,37 +44,28 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 		batchSize = s
 	}
 
-	isFirst := true
 	var read int64 = 0
-	entities := make([]*Entity, 0)
-	esp := NewEntityStreamParser()
-
-	var entityContext *uda.Context
-	err := esp.ParseStream(reader, func(entity *Entity) error {
-		if isFirst {
-			isFirst = false
-			entityContext = AsContext(entity)
-		} else {
-			if entity.ID != "@continuation" {
-				entities = append(entities, entity)
-				read++
+	entities := make([]*egdm.Entity, 0)
+	nsm := egdm.NewNamespaceContext()
+	esp := egdm.NewEntityParser(nsm).WithExpandURIs()
+	err := esp.Parse(reader, func(entity *egdm.Entity) error {
+		entities = append(entities, entity)
+		read++
+		if read == batchSize {
+			_, err := ds.sf.putEntities(info.name, stage, entities)
+			if err != nil {
+				return err
 			}
-			if read == batchSize {
-				_, err := ds.sf.putEntities(info.name, stage, entities, entityContext)
-				if err != nil {
-					return err
-				}
-				read = 0
-				entities = make([]*Entity, 0)
-			}
+			read = 0
+			entities = make([]*egdm.Entity, 0)
 		}
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}
 	if read > 0 {
-		_, err := ds.sf.putEntities(info.name, stage, entities, entityContext)
+		_, err := ds.sf.putEntities(info.name, stage, entities)
 		if err != nil {
 			return err
 		}
@@ -92,62 +83,59 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 
 func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) error {
 	var batchSize int64 = 50000
-
-	isFirst := true
 	var read int64 = 0
-	entities := make([]*Entity, 0)
-	esp := NewEntityStreamParser()
+	entities := make([]*egdm.Entity, 0)
 	files := make([]string, 0)
 
-	var entityContext *uda.Context
-	err := esp.ParseStream(reader, func(entity *Entity) error {
-		if isFirst {
-			isFirst = false
-			entityContext = AsContext(entity)
-		} else {
-			if entity.ID != "@continuation" {
-				entities = append(entities, entity)
-				read++
+	nsm := egdm.NewNamespaceContext()
+	esp := egdm.NewEntityParser(nsm).WithExpandURIs()
+	err := esp.Parse(reader, func(entity *egdm.Entity) error {
+		entities = append(entities, entity)
+		read++
+		if read == batchSize {
+			var err error
+			files, err = ds.safeEnsureStageAndPut(dataset, entities, files)
+			if err != nil {
+				return err
 			}
-			if read == batchSize {
-				var err error
-				read, entities, files, err = ds.safeEnsureStageAndPut(ctx, dataset, entityContext, entities, files)
-				if err != nil {
-					return err
-				}
-			}
+			read = 0
+			entities = make([]*egdm.Entity, 0)
 		}
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}
 	if read > 0 {
-		read, entities, files, err = ds.safeEnsureStageAndPut(ctx, dataset, entityContext, entities, files)
+		files, err = ds.safeEnsureStageAndPut(dataset, entities, files)
 		if err != nil {
 			return err
 		}
+		read = 0
+		entities = make([]*egdm.Entity, 0)
 	}
 	if len(files) > 0 {
-
-		err := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64))
-		if err != nil {
-
-			return err
+		err2 := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64))
+		if err2 != nil {
+			return err2
 		}
 	}
 
 	return nil
 }
 
-func (ds *Dataset) safeEnsureStageAndPut(ctx context.Context, dataset string, entityContext *uda.Context, entities []*Entity, files []string) (int64, []*Entity, []string, error) {
-	if f, err := ds.sf.EnsureStageAndPut(ctx, dataset, entityContext, entities); err != nil {
-		return 0, nil, nil, err
-	} else {
-		files = append(files, f...)
+func (ds *Dataset) safeEnsureStageAndPut(dataset string, entities []*egdm.Entity, files []string) ([]string, error) {
+	stage, err := ds.sf.mkStage("", dataset)
+	if err != nil {
+		return nil, err
 	}
-	entities = make([]*Entity, 0)
-	return 0, entities, files, nil
+
+	newFiles, err2 := ds.sf.putEntities(dataset, stage, entities)
+	if err2 != nil {
+		return nil, err2
+	}
+	files = append(files, newFiles...)
+	return files, nil
 }
 
 func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo) error {

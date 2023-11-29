@@ -21,7 +21,6 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.0.17
 	github.com/mimiro-io/common-datalayer v0.1.4
 	github.com/mimiro-io/entity-graph-data-model v0.7.1
-	github.com/mimiro-io/internal-go-util v0.0.0-20230307120700-77b59ac32055
 	github.com/onsi/ginkgo/v2 v2.13.1
 	github.com/onsi/gomega v1.30.0
 	github.com/rs/zerolog v1.31.0
@@ -52,7 +51,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.14.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.31.0 // indirect
 	github.com/aws/smithy-go v1.17.0 // indirect
-	github.com/bcicen/jstream v1.0.1 // indirect
 	github.com/danieljoos/wincred v1.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect

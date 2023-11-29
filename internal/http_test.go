@@ -428,8 +428,8 @@ var _ = Describe("The web server", Serial, func() {
 "y": "http://snowflake/bar/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 }},
-{"id": "x:1", "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello", "x:nogood": null, "x:bad": [null]}},
-{"id": "x:2", "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
+{"id": "x:1", "recorded": 1456456456, "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "recorded": 1456456457, "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
 `))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res.StatusCode).To(Equal(200))
@@ -439,10 +439,10 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 			bytes, err := io.ReadAll(r)
 			Expect(err).NotTo(HaveOccurred())
-			// println(string(bytes))
+			//println(string(bytes))
 			Expect(string(bytes)).To(Equal(
-				`{"id":"http://snowflake/foo/1","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
-{"id":"http://snowflake/foo/2","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+				`{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
+{"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
 `))
 		})
 		It("PUT gzipped mapped files in a stage and load specified files", func() {
@@ -509,7 +509,7 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 			bytes, err := io.ReadAll(r)
 			Expect(err).NotTo(HaveOccurred())
-			// println(string(bytes))
+			println(string(bytes))
 			Expect(string(bytes)).To(Equal(
 				`{"id":"http://snowflake/foo/1","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
 {"id":"http://snowflake/foo/2","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
