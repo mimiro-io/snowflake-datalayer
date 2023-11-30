@@ -30,7 +30,7 @@ var _ = Describe("The web server", Serial, func() {
 	var cfg *Config
 	cnt := 0
 	BeforeEach(func() {
-		//LoadLogger("console", "test", "debug")
+		LoadLogger("console", "test", "debug")
 		cnt++
 		var err error
 		db, mock, err = sqlmock.NewWithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
@@ -479,7 +479,7 @@ var _ = Describe("The web server", Serial, func() {
 			}}
 
 			// not checking for actual sql, this is regex and it does like all syntax as is
-			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB2.SFS2.S_POTATOE`).WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB2.SFS2.S_POTATOE copy`).WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 
 			mock.ExpectBegin()

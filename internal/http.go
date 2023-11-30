@@ -147,7 +147,7 @@ func (h *handler) postEntities(c echo.Context) error {
 	if ds.IsFullSync() {
 		err = h.ds.WriteFs(ctx, ds, c.Request().Body)
 	} else {
-		err = h.ds.Write(ctx, ds.name, c.Request().Body)
+		err = h.ds.Write(ctx, ds, c.Request().Body)
 	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())

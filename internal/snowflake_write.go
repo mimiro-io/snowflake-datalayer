@@ -3,106 +3,18 @@ package internal
 import (
 	"compress/gzip"
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/bfontaine/jsons"
+	common_datalayer "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
+	gsf "github.com/snowflakedb/gosnowflake"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"time"
-
-	"github.com/bfontaine/jsons"
-	"github.com/rs/zerolog"
-	gsf "github.com/snowflakedb/gosnowflake"
 )
-
-type pool struct {
-	db *sql.DB
-}
-
-var p *pool
-
-type Snowflake struct {
-	cfg        *Config
-	log        zerolog.Logger
-	NewTmpFile func(dataset string) (*os.File, error, func()) // file, error, function to cleanup file
-	lock       sync.Mutex
-}
-
-func NewSnowflake(cfg *Config) (*Snowflake, error) {
-	connectionString := "%s:%s@%s"
-	if cfg.PrivateCert != "" || cfg.SnowflakePrivateKey != "" {
-		data, err := base64.StdEncoding.DecodeString(cfg.SnowflakePrivateKey)
-		if err != nil || len(data) == 0 {
-			data, err = base64.StdEncoding.DecodeString(cfg.PrivateCert)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		parsedKey8, err := x509.ParsePKCS8PrivateKey(data)
-		if err != nil {
-			return nil, err
-		}
-		parsedKey := parsedKey8.(*rsa.PrivateKey)
-		// privateKey, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(data, cfg.CertPassword)
-		config := &gsf.Config{
-			Account:       cfg.SnowflakeAccount,
-			User:          cfg.SnowflakeUser,
-			Database:      cfg.SnowflakeDB,
-			Schema:        cfg.SnowflakeSchema,
-			Warehouse:     cfg.SnowflakeWarehouse,
-			Region:        "eu-west-1",
-			Authenticator: gsf.AuthTypeJwt,
-			PrivateKey:    parsedKey,
-		}
-		s, err := gsf.DSN(config)
-		if err != nil {
-			return nil, err
-		}
-		connectionString = s
-	} else {
-		if cfg.SnowflakeURI != "" {
-			connectionString = fmt.Sprintf(connectionString, cfg.SnowflakeUser, cfg.SnowflakePassword, cfg.SnowflakeURI)
-		} else {
-			uri := fmt.Sprintf("%s/%s/%s", cfg.SnowflakeAccount, cfg.SnowflakeDB, cfg.SnowflakeSchema)
-			connectionString = fmt.Sprintf(connectionString, cfg.SnowflakeUser, cfg.SnowflakePassword, uri)
-		}
-	}
-
-	if p == nil || p.db == nil {
-		LOG.Info().Msg("opening db")
-		db, err := sql.Open("snowflake", connectionString)
-		// snowflake tokens time out, after 4 hours with default session settings.
-		// if we do not evict idle connections, we will get errors after 4 hours
-		db.SetConnMaxIdleTime(30 * time.Second)
-		db.SetConnMaxLifetime(1 * time.Hour)
-
-		if err != nil {
-			return nil, err
-		}
-
-		p = &pool{
-			db: db,
-		}
-	}
-	LOG.Info().Msg(fmt.Sprintf("start or refresh happening. database connection stats: %+v", p.db.Stats()))
-	_, err := p.db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
-	if err != nil {
-		return nil, err
-	}
-	return &Snowflake{
-		cfg:        cfg,
-		log:        LOG.With().Str("logger", "snowflake").Logger(),
-		NewTmpFile: newTmpFileWriter,
-	}, nil
-}
 
 func newTmpFileWriter(dataset string) (*os.File, error, func()) {
 	file, err := os.CreateTemp("", dataset)
@@ -115,14 +27,14 @@ func newTmpFileWriter(dataset string) (*os.File, error, func()) {
 
 func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.Entity) ([]string, error) {
 	return withRefresh(sf, func() ([]string, error) {
-		// we will handle snowflake in 2 steps, first write each batch as a ndjson file
+		// we will handle snowflake in 2 steps, first write each batch as a zipped ndjson file
 		file, err, cleanTmpFile := sf.NewTmpFile(dataset)
 		if err != nil {
 			return nil, err
 		}
 		defer cleanTmpFile()
 
-		err = sf.gzippedNDJson(file, entities, dataset)
+		err = sf.writeAsGzippedNDJson(file, entities, dataset)
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +54,7 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.
 	})
 }
 
-func (sf *Snowflake) gzippedNDJson(file io.Writer, entities []*egdm.Entity, dataset string) error {
+func (sf *Snowflake) writeAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, dataset string) error {
 	zipWriter := gzip.NewWriter(file)
 	j := jsons.NewWriter(zipWriter)
 	for _, entity := range entities {
@@ -164,15 +76,17 @@ func (sf *Snowflake) getStage(fsId string, dataset string) string {
 	return stage
 }
 
-func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
+func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.DatasetDefinition) (string, error) {
 	return withRefresh(sf, func() (string, error) {
-		dsName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-		stage := fmt.Sprintf("%s.%s.S_%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema), dsName)
+		dbName, schemaName, dsName := sf.tableParts(dataset, mapping)
+		// construct base stage name from dataset name plus either mapping config or app config as fallback
+		stage := fmt.Sprintf("%s.%s.S_%s", dbName, schemaName, dsName)
 
+		// if full sync id is provided, append it to stage name. also do some cleanup for previous full sync stages
 		if fsId != "" {
 			sf.log.Info().Msg("Full sync requested for " + dsName + ", id " + fsId)
 			fsSuffix := fmt.Sprintf("_FSID_%s", fsId)
-			query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + sf.cfg.SnowflakeDB + "." + sf.cfg.SnowflakeSchema
+			query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + dbName + "." + schemaName
 			query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
 			// println(query)
 			ctx, err := gsf.WithMultiStatement(context.Background(), 2)
@@ -200,7 +114,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 					}
 				}
 				sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
-				stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", sf.cfg.SnowflakeDB, sf.cfg.SnowflakeSchema, existingFsStage)
+				stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", dbName, schemaName, existingFsStage)
 				_, err = p.db.Exec(stmt)
 				if err != nil {
 					sf.log.Error().Err(err).Str("statement", stmt).Msg("Failed to drop previous full sync stage")
@@ -212,6 +126,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 			stage = stage + fsSuffix
 		}
 
+		// now create stage
 		q := fmt.Sprintf(`
 	CREATE STAGE IF NOT EXISTS %s
 		copy_options = (on_error=ABORT_STATEMENT)
@@ -227,35 +142,14 @@ func (sf *Snowflake) mkStage(fsId, dataset string) (string, error) {
 	})
 }
 
-func withRefresh[T any](sf *Snowflake, f func() (T, error)) (T, error) {
-	sf.lock.Lock()
-	defer sf.lock.Unlock()
-	r, callErr := f()
-	if callErr != nil {
-		if strings.Contains(callErr.Error(), "390114") {
-			sf.log.Info().Msg("Refreshing snowflake connection")
-			s, err := NewSnowflake(sf.cfg)
-			if err != nil {
-				sf.log.Error().Err(err).Msg("Failed to reconnect to snowflake")
-				return r, err
-
-			}
-			sf = s
-			sf.log.Info().Msg("Reconnected to snowflake")
-			return f()
-		}
-		sf.log.Debug().Msg("Not a refresh error")
-	}
-	return r, callErr
-}
-
-func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) error {
+func (sf *Snowflake) Load(datasetName string, files []string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
 
 		return nil, func() error {
-			nameSpace := fmt.Sprintf("%s.%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema))
-			stage := fmt.Sprintf("%s.S_", nameSpace) + strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-			tableName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
+			dbName, schemaName, dsName := sf.tableParts(datasetName, mapping)
+			nameSpace := fmt.Sprintf("%s.%s", dbName, schemaName)
+			stage := fmt.Sprintf("%s.S_", nameSpace) + dsName
+			tableName := dsName
 
 			tx, err := p.db.Begin()
 			if err != nil {
@@ -292,7 +186,7 @@ func (sf *Snowflake) Load(dataset string, files []string, batchTimestamp int64) 
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP)
 	FILES = (%s);
-	`, nameSpace, tableName, batchTimestamp, dataset, stage, fileString)
+	`, nameSpace, tableName, batchTimestamp, datasetName, stage, fileString)
 			sf.log.Trace().Msg(q)
 			if _, err := tx.Query(q); err != nil {
 				return err

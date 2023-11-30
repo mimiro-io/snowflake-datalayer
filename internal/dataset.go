@@ -28,9 +28,10 @@ func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
 
 func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) error {
 	var stage string
+	mappings, err := ds.GetDatasetMapping(info)
 	if info.fsStart && info.fsID != "" {
 		var err error
-		stage, err = ds.sf.mkStage(info.fsID, info.name)
+		stage, err = ds.sf.mkStage(info.fsID, info.name, mappings)
 		if err != nil {
 			ds.log.Error().Err(err).Str("stage", stage).Msg("Failed to create stage, and is not a refresh issue")
 			return err
@@ -48,7 +49,7 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 	entities := make([]*egdm.Entity, 0)
 	nsm := egdm.NewNamespaceContext()
 	esp := egdm.NewEntityParser(nsm).WithExpandURIs()
-	err := esp.Parse(reader, func(entity *egdm.Entity) error {
+	err = esp.Parse(reader, func(entity *egdm.Entity) error {
 		entities = append(entities, entity)
 		read++
 		if read == batchSize {
@@ -81,23 +82,29 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 	return nil
 }
 
-func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) error {
+func (ds *Dataset) Write(ctx context.Context, info dsInfo, reader io.Reader) error {
+	dataset := info.name
 	var batchSize int64 = 50000
 	var read int64 = 0
 	entities := make([]*egdm.Entity, 0)
 	files := make([]string, 0)
 
+	mappings, err := ds.GetDatasetMapping(info)
 	nsm := egdm.NewNamespaceContext()
 	esp := egdm.NewEntityParser(nsm).WithExpandURIs()
-	err := esp.Parse(reader, func(entity *egdm.Entity) error {
+	err = esp.Parse(reader, func(entity *egdm.Entity) error {
 		entities = append(entities, entity)
 		read++
 		if read == batchSize {
-			var err error
-			files, err = ds.safeEnsureStageAndPut(dataset, entities, files)
+			stage, err := ds.sf.mkStage("", dataset, mappings)
 			if err != nil {
 				return err
 			}
+			newFiles, err := ds.sf.putEntities(dataset, stage, entities)
+			if err != nil {
+				return err
+			}
+			files = append(files, newFiles...)
 			read = 0
 			entities = make([]*egdm.Entity, 0)
 		}
@@ -107,15 +114,19 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 		return err
 	}
 	if read > 0 {
-		files, err = ds.safeEnsureStageAndPut(dataset, entities, files)
-		if err != nil {
-			return err
+		// mkStage is idempotent, so we can call it again to be sure it exists
+		stage, err2 := ds.sf.mkStage("", dataset, mappings)
+		if err2 != nil {
+			return err2
 		}
-		read = 0
-		entities = make([]*egdm.Entity, 0)
+		newFiles, err2 := ds.sf.putEntities(dataset, stage, entities)
+		if err2 != nil {
+			return err2
+		}
+		files = append(files, newFiles...)
 	}
 	if len(files) > 0 {
-		err2 := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64))
+		err2 := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64), mappings)
 		if err2 != nil {
 			return err2
 		}
@@ -124,21 +135,15 @@ func (ds *Dataset) Write(ctx context.Context, dataset string, reader io.Reader) 
 	return nil
 }
 
-func (ds *Dataset) safeEnsureStageAndPut(dataset string, entities []*egdm.Entity, files []string) ([]string, error) {
-	stage, err := ds.sf.mkStage("", dataset)
+func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo) error {
+	mapping, err := ds.GetDatasetMapping(dsInfo)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	newFiles, err2 := ds.sf.putEntities(dataset, stage, entities)
-	if err2 != nil {
-		return nil, err2
-	}
-	files = append(files, newFiles...)
-	return files, nil
+	return ds.sf.ReadAll(ctx, writer, dsInfo, mapping)
 }
 
-func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo) error {
+func (ds *Dataset) GetDatasetMapping(dsInfo dsInfo) (*common_datalayer.DatasetDefinition, error) {
 	mapping, err := ds.cfg.Mapping(dsInfo.name)
 	if err != nil {
 		LOG.Info().Msg("Failed to get mapping for dataset " + dsInfo.name + ". Trying implicit mapping.")
@@ -146,13 +151,10 @@ func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo)
 		mapping, err2 = implicitMapping(dsInfo.name)
 		if err2 != nil {
 			LOG.Error().Err(err2).Msg("Failed to get implicit mapping for dataset " + dsInfo.name + ".")
-			return fmt.Errorf("no table mapping: %w, %w", err, err2)
+			return nil, fmt.Errorf("no table mapping: %w, %w", err, err2)
 		}
 	}
-	if err = ds.sf.ReadAll(ctx, writer, dsInfo, mapping); err != nil {
-		return err
-	}
-	return nil
+	return mapping, nil
 }
 
 const (
