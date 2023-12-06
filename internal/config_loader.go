@@ -25,7 +25,8 @@ type ConfigLoader struct {
 func StartConfigLoader(cfg *Config) *ConfigLoader {
 	c := newConfigLoader(cfg)
 	if cfg.ConfigLocation == "" {
-		LOG.Info().Msg("No config file specified, skipping config loader. Set CONFIG_LOCATION to specify a config file.")
+		LOG.Info().
+			Msg("No config file specified, skipping config loader. Set CONFIG_LOCATION to specify a config file.")
 		return c
 	}
 	LOG.Info().Msg("Starting config loader")
@@ -81,7 +82,9 @@ func (c *ConfigLoader) Stop() {
 	c.ticker.Stop()
 }
 
-func (c *ConfigLoader) loadURL(clientID, clientSecret, audience, grantType, endPoint string) func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
+func (c *ConfigLoader) loadURL(
+	clientID, clientSecret, audience, grantType, endPoint string,
+) func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
 	return func(configEndpoint string) ([]*common_datalayer.DatasetDefinition, error) {
 		req, err := http.NewRequest("GET", configEndpoint, nil) //
 		if err != nil {
@@ -132,7 +135,10 @@ type content struct {
 	Data common_datalayer.Config `json:"data"`
 }
 
-func (c *ConfigLoader) processLoadedConfig(location string, reader io.ReadCloser) ([]*common_datalayer.DatasetDefinition, error) {
+func (c *ConfigLoader) processLoadedConfig(
+	location string,
+	reader io.ReadCloser,
+) ([]*common_datalayer.DatasetDefinition, error) {
 	s, err := io.ReadAll(reader)
 	if err != nil {
 		LOG.Error().Err(err).Msg("Unable to read config from : " + location)
@@ -165,7 +171,9 @@ type cnfAuthResponse struct {
 	TokenType   string `json:"token_type"`
 }
 
-func (c *ConfigLoader) fetchNewConfigToken(clientID, clientSecret, audience, grantType, endpoint string) (*cnfAuthResponse, error) {
+func (c *ConfigLoader) fetchNewConfigToken(
+	clientID, clientSecret, audience, grantType, endpoint string,
+) (*cnfAuthResponse, error) {
 	requestBody, err := json.Marshal(map[string]string{
 		"client_id":     clientID,
 		"client_secret": clientSecret,

@@ -6,11 +6,12 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	common_datalayer "github.com/mimiro-io/common-datalayer"
 	"os"
 	"strings"
 	"sync"
 	"time"
+
+	common_datalayer "github.com/mimiro-io/common-datalayer"
 
 	"github.com/rs/zerolog"
 	gsf "github.com/snowflakedb/gosnowflake"
@@ -29,8 +30,8 @@ type Snowflake struct {
 	lock       sync.Mutex
 }
 
-func (sf *Snowflake) tableParts(dataset string, mapping *common_datalayer.DatasetDefinition) (string, string, string) {
-	dsName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
+func (sf *Snowflake) tableParts(mapping *common_datalayer.DatasetDefinition) (string, string, string) {
+	dsName := strings.ToUpper(strings.ReplaceAll(mapping.DatasetName, ".", "_"))
 	if ds, ok := mapping.SourceConfig[TableName]; ok {
 		dsName = strings.ToUpper(ds.(string))
 	}
@@ -43,6 +44,38 @@ func (sf *Snowflake) tableParts(dataset string, mapping *common_datalayer.Datase
 		schemaName = strings.ToUpper(schema.(string))
 	}
 	return dbName, schemaName, dsName
+}
+
+func (sf *Snowflake) colMappings(mapping *common_datalayer.DatasetDefinition) (string, string, string) {
+	columns := ", entity"
+	columnTypes := ", entity variant"
+	colExtractions := ", $1::variant"
+	if mapping.IncomingMappingConfig != nil && mapping.IncomingMappingConfig.PropertyMappings != nil {
+		columns = ""
+		columnTypes = ""
+		colExtractions = ""
+		for _, col := range mapping.IncomingMappingConfig.PropertyMappings {
+			srcMap := "props"
+			if col.IsReference {
+				srcMap = "refs"
+			}
+			columns = fmt.Sprintf("%s, %s", columns, col.Property)
+			if col.IsRecorded {
+				columnTypes = fmt.Sprintf("%s, %s INTEGER", columnTypes, col.Property)
+				colExtractions = fmt.Sprintf(`%s, $1:recorded::integer`, colExtractions)
+			} else if col.IsDeleted {
+				columnTypes = fmt.Sprintf("%s, %s BOOLEAN", columnTypes, col.Property)
+				colExtractions = fmt.Sprintf(`%s, $1:deleted::boolean`, colExtractions)
+			} else if col.IsIdentity {
+				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
+				colExtractions = fmt.Sprintf(`%s, $1:id::%s`, colExtractions, col.Datatype)
+			} else {
+				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
+				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s`, colExtractions, srcMap, col.EntityProperty, col.Datatype)
+			}
+		}
+	}
+	return columns[2:], columnTypes[2:], colExtractions[2:]
 }
 
 func NewSnowflake(cfg *Config) (*Snowflake, error) {

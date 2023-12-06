@@ -6,14 +6,14 @@
 
 Running as from source:
 ```shell
-go run ./cmd/flake 
+go run ./cmd/flake
 ```
 
 Note that the server in default mode expects to be configured for jwt auth.
 Provide the following env vars to configure it:
 ```shell
 WELL_KNOWN=https://<authservice>/jwks/.well-known/jwks.json
-ISSUER=https://<issuer> 
+ISSUER=https://<issuer>
 AUDIENCE=https://<audience>
 ```
 
@@ -54,25 +54,30 @@ ALTER USER <DB username> SET RSA_PUBLIC_KEY='<paste pub key here>'
 When running the server, you need to provide the private key as a base64 encoded string.
 It can be set in the env var `SNOWFLAKE_PRIVATE_KEY`.
 
-## Writing to Snowflake
+## Convention based usage with minimal configuration
 
-The process of writing to snowflake is configuration free. The layer will create a table for each  posted-to-dataset and write the entities to it.
-The layer supports the UDA full sync protocol. At the end of a fullsync process, it does a table swap.
+As long as the layer is configured with a valid snowflake connection,
+it will be able to read and write to snowflake tables that follow a convention.
+
+### Writing to Snowflake
+
+Writing to snowflake can be done almost configuration free. The layer will create a table for each
+dataset that is POSTed to, and write the entities to it.
+The layer supports the UDA full sync protocol in addition to incremental writing.
+At the end of a fullsync process, it does a table swap, so that there is no downtime for the table.
 In Incremental sync, it will append to the table with the new entities.
 
 There is no guarantee for uniqueness of the entities in the table, but the written table rows contain a
 recorded timestamp, which can be used to pick the latest duplicates. Also note that entities may be in
 a deleted state. use the `deleted` field to filter them out.
 
-## Reading from Snowflake
-
-### Convention based reading
+### Reading from Snowflake
 
 If a target table contains valid UDA entities in json format, the layer can read from the table without any configuration.
 Prerequisites:
 - The table must contain a column named `ENTITY` which contains the entity.
 - Entities are fully expanded, i.e. no namespace prefixes are used.
-- Chronology is reflected by the tables natural order. The latest entity is the last row in the table.
+- Chronology is reflected by the table's natural order. The latest entity is the last row in the table.
 
 To use convention based reading, construct a dataset name in this form:
 ```
@@ -85,12 +90,70 @@ Then use the dataset name in an entities GET request towards the layer.
 curl http://<layerhost>/datasets/<database>.<schema>.<table>/entities
 ```
 
-### Configured Datasets
+## Usage with Configured Datasets
+
+### Dataset Configuration
+
+The layer uses the `dataset_definitions` part of the common-datalayer configuration to configure the datasets.
+For details on the configuration options, see the [documentation](https://github.com/mimiro-io/common-datalayer#data-layer-configuration).
+
+This configuration format can be read from a file or from an url. The layer will look
+for the env var `CONFIG_LOCATION`. It will also re-read the configuration file every minute
+to allow for dynamic configuration of datasets. The interval can be configured by setting whole
+second values in the env var `CONFIG_LOADER_INTERVAL`.
+
+In case a JWT secured URL is used, these configuration options to the layer can be used:
+```shell
+CONFIG_LOADER_CLIENT_ID
+CONFIG_LOADER_CLIENT_SECRET
+CONFIG_LOADER_AUDIENCE
+CONFIG_LOADER_GRANT_TYPE
+CONFIG_LOADER_AUTH_ENDPOINT
+```
+
+### Writing to Snowflake
+
+To configure a dataset for writing, add a dataset definition to the configuration with the following fields:
+Note that `source_config` is optional. If not provided here, the layer uses the dataset name as table,
+and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWFLAKE_SCHEMA`.
+
+```json
+{
+  "name": "name of the dataset (uri path)",
+  "source_config": {
+    "table_name": "name of the table in snowflake",
+    "schema": "name of the schema in snowflake",
+    "database": "name of the database in snowflake"
+  },
+  "incoming_mapping_config": {
+    "base_uri": "http://example.com",
+    "property_mappings": [{
+        "required": true,
+        "entity_property": "property name in the entity",
+        "property": "name of the column in the table",
+        "datatype": "integer", // snowflake datatype, must be compatible with the value
+        "is_reference": false, // if true, the value is looked up in the references part of the entity
+        "is_identity": false,
+        "is_deleted": false,
+        "is_recorded": false
+    }]
+  }
+}
+```
+
+Every property mapping will be used to create a column in the table. The layer will create the table if it does not exist.
+However, the layer will never update existing tables. If you need to change the schema, you need to drop the table first.
+
+A typical property mapping needs to specify the column name: `property`, the column type: `datatype` and the
+entity property to take the value from: `entity_property`.
+
+Also note that `entity_property` names must be fully expanded (i.e. no namespace prefixes).
+
+### Reading from Snowflake
 
 The layer can be configured to read from tables that do not follow the convention based reading.
 To do so, create a dataset configuration for layer. The configuration is a json object with the following fields:
 
-For details on the options in outgoing_mapping_config, see the [mappings documentation](https://github.com/mimiro-io/common-datalayer#data-layer-configuration).
 ```json
 {
   "dataset_definitions": [
@@ -124,19 +187,5 @@ For details on the options in outgoing_mapping_config, see the [mappings documen
     }
   ]
 }
-
-
 ```
-This configuration format can be read from a file or from an url. The layer will look 
-for the env var `CONFIG_LOCATION`. It will also re-read the configuration file every minute
-to allow for dynamic configuration of datasets. The interval can be configured by setting whole
-second values in the env var `CONFIG_LOADER_INTERVAL`.
 
-In case a JWT secured URL is used, these configuration options to the layer can be used:
-```shell
-CONFIG_LOADER_CLIENT_ID
-CONFIG_LOADER_CLIENT_SECRET
-CONFIG_LOADER_AUDIENCE
-CONFIG_LOADER_GRANT_TYPE
-CONFIG_LOADER_AUTH_ENDPOINT
-```

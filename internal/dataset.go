@@ -3,11 +3,12 @@ package internal
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+
 	common_datalayer "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 	"github.com/rs/zerolog"
-	"io"
-	"strings"
 )
 
 type Dataset struct {
@@ -29,6 +30,9 @@ func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
 func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) error {
 	var stage string
 	mappings, err := ds.GetDatasetMapping(info)
+	if err != nil {
+		return err
+	}
 	if info.fsStart && info.fsID != "" {
 		var err error
 		stage, err = ds.sf.mkStage(info.fsID, info.name, mappings)
@@ -73,9 +77,8 @@ func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) e
 	}
 	if info.fsEnd {
 		ds.log.Info().Str("stage", stage).Msg("Loading fullsync stage")
-		err := ds.sf.LoadStage(info.name, stage, ctx.Value("recorded").(int64))
+		err := ds.sf.LoadStage(stage, ctx.Value("recorded").(int64), mappings)
 		if err != nil {
-
 			return err
 		}
 	}
@@ -90,6 +93,9 @@ func (ds *Dataset) Write(ctx context.Context, info dsInfo, reader io.Reader) err
 	files := make([]string, 0)
 
 	mappings, err := ds.GetDatasetMapping(info)
+	if err != nil {
+		return err
+	}
 	nsm := egdm.NewNamespaceContext()
 	esp := egdm.NewEntityParser(nsm).WithExpandURIs()
 	err = esp.Parse(reader, func(entity *egdm.Entity) error {
@@ -126,7 +132,7 @@ func (ds *Dataset) Write(ctx context.Context, info dsInfo, reader io.Reader) err
 		files = append(files, newFiles...)
 	}
 	if len(files) > 0 {
-		err2 := ds.sf.Load(dataset, files, ctx.Value("recorded").(int64), mappings)
+		err2 := ds.sf.Load(files, ctx.Value("recorded").(int64), mappings)
 		if err2 != nil {
 			return err2
 		}

@@ -90,7 +90,10 @@ func memoryGuard(conf *Config) echo.MiddlewareFunc {
 				LOG.Debug().Msg(fmt.Sprintf("MemoryGuard: headroom: %v (min: %v)", headroom, minHeadRoom))
 				if headroom < minHeadRoom {
 					LOG.Info().Msg(fmt.Sprintf("MemoryGuard: headroom too low, rejecting request: %v", c.Request().URL))
-					return echo.NewHTTPError(http.StatusServiceUnavailable, "MemoryGuard: headroom too low, rejecting request")
+					return echo.NewHTTPError(
+						http.StatusServiceUnavailable,
+						"MemoryGuard: headroom too low, rejecting request",
+					)
 				}
 			} else {
 				LOG.Debug().Msg("MemoryGuard: no memory stats available")

@@ -30,7 +30,7 @@ var _ = Describe("The web server", Serial, func() {
 	var cfg *Config
 	cnt := 0
 	BeforeEach(func() {
-		LoadLogger("console", "test", "debug")
+		// LoadLogger("console", "test", "debug")
 		cnt++
 		var err error
 		db, mock, err = sqlmock.NewWithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
@@ -158,7 +158,7 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			// GinkgoLogr.Info(string(bodyBytes))
 			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
 "_": "http://snowflake/foo/bar/baz/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -195,7 +195,7 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(resp.StatusCode).To(Equal(200))
 			bodyBytes, err := io.ReadAll(resp.Body)
 			Expect(err).NotTo(HaveOccurred())
-			//GinkgoLogr.Info(string(bodyBytes))
+			// GinkgoLogr.Info(string(bodyBytes))
 			Expect(string(bodyBytes)).To(Equal(`[{"id": "@context", "namespaces": {
 "_": "http://snowflake/foo/bar/baz/",
 "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -411,18 +411,19 @@ var _ = Describe("The web server", Serial, func() {
 
 			// not checking for actual sql, this is regex and it does like all syntax as is
 			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB.SFS.S_POTATOE`).WillReturnResult(sqlmock.NewResult(1, 1))
-			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 
 			mock.ExpectBegin()
 			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB.SFS.POTATOE \\( id varchar, recorded integer," +
 				" deleted boolean, dataset varchar, entity variant \\);").WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery("COPY INTO SFDB.SFS.POTATOE\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
-				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'potatoe'::varchar, \\$1::variant FROM @SFDB.SFS.S_POTATOE" +
+				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'sfdb.sfs.potatoe'::varchar, \\$1::variant FROM @SFDB.SFS.S_POTATOE" +
 				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
 			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 			mock.ExpectCommit()
 
-			res, err := http.Post("http://localhost:17866/datasets/potatoe/entities", "application/json",
+			res, err := http.Post("http://localhost:17866/datasets/sfdb.sfs.potatoe/entities", "application/json",
 				strings.NewReader(`[{"id": "@context", "namespaces": {
 "x": "http://snowflake/foo/",
 "y": "http://snowflake/bar/",
@@ -439,11 +440,12 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 			bytes, err := io.ReadAll(r)
 			Expect(err).NotTo(HaveOccurred())
-			//println(string(bytes))
+			// println(string(bytes))
 			Expect(string(bytes)).To(Equal(
 				`{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
 {"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
-`))
+`,
+			))
 		})
 		It("PUT gzipped mapped files in a stage and load specified files", func() {
 			f, err := os.CreateTemp("", "zip")
@@ -463,32 +465,45 @@ var _ = Describe("The web server", Serial, func() {
 				IncomingMappingConfig: &common_datalayer.IncomingMappingConfig{
 					MapNamed: false,
 					PropertyMappings: []*common_datalayer.EntityToItemPropertyMapping{{
-						EntityProperty:       "",
-						Property:             "",
-						Datatype:             "",
-						DefaultValue:         "",
-						StripReferencePrefix: false,
-						Required:             false,
-						IsIdentity:           false,
-						IsReference:          false,
-						IsDeleted:            false,
-						IsRecorded:           false,
+						EntityProperty: "foo",
+						Property:       "foo",
+						Datatype:       "varchar",
+					}, {
+						EntityProperty: "ok",
+						Property:       "ok",
+						Datatype:       "boolean",
+					}, {
+						EntityProperty: "num",
+						Property:       "num",
+						Datatype:       "integer",
+					}, {
+						EntityProperty: "baz",
+						Property:       "baz",
+						Datatype:       "varchar",
+						IsReference:    true,
 					}},
 					BaseURI: "http://potatoe/test/",
 				},
 			}}
 
 			// not checking for actual sql, this is regex and it does like all syntax as is
-			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB2.SFS2.S_POTATOE copy`).WillReturnResult(sqlmock.NewResult(1, 1))
-			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB2.SFS2.S_POTATOE copy`).
+				WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 
 			mock.ExpectBegin()
 			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB2.SFS2.POTATOE \\( id varchar, recorded integer," +
 				" deleted boolean, dataset varchar, foo varchar, ok boolean, num integer, baz varchar \\);").WillReturnResult(sqlmock.NewResult(1, 1))
-			mock.ExpectQuery("COPY INTO SFDB2.SFS2.POTATOE\\(id, recorded, deleted, dataset, foo, baz\\) FROM \\( " +
-				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'potatoe'::varchar, \\$1::variant FROM @SFDB.SFS.S_POTATOE" +
-				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
-			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+			mock.ExpectQuery("COPY INTO SFDB2.SFS2.POTATOE\\(id, recorded, deleted, dataset, foo, ok, num, baz\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'potatoes'::varchar, " +
+				"\\$1:props:\"foo\"::varchar, " +
+				"\\$1:props:\"ok\"::boolean, " +
+				"\\$1:props:\"num\"::integer, " +
+				"\\$1:refs:\"baz\"::varchar " +
+				"FROM @SFDB2.SFS2.S_POTATOE\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
+			).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 			mock.ExpectCommit()
 
 			res, err := http.Post("http://localhost:17866/datasets/potatoes/entities", "application/json",
@@ -509,11 +524,18 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 			bytes, err := io.ReadAll(r)
 			Expect(err).NotTo(HaveOccurred())
-			println(string(bytes))
+			// println(string(bytes))
 			Expect(string(bytes)).To(Equal(
-				`{"id":"http://snowflake/foo/1","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
-{"id":"http://snowflake/foo/2","recorded":0,"deleted":false,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
-`))
+				`{"id":"http://snowflake/foo/1","refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{` +
+					`"http://snowflake/foo/foo":"bar","http://snowflake/foo/num":12,"http://snowflake/foo/ok":true}}
+{"id":"http://snowflake/foo/2","refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+{"id":"http://snowflake/foo/3","recorded":126456789123,"deleted":true,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{` +
+					`"http://snowflake/foo/foo":"bar3",` +
+					`"http://snowflake/foo/num":12,` +
+					`"http://snowflake/foo/ok":true` +
+					`}}
+`,
+			))
 		})
 	})
 })

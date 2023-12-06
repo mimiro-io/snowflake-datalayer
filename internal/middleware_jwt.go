@@ -176,4 +176,3 @@ func extractToken(c echo.Context) (string, error) {
 	}
 	return "", ErrJWTMissing
 }
-

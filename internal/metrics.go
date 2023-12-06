@@ -164,4 +164,3 @@ func medianBucket(h *metrics.Float64Histogram) float64 {
 	}
 	return 0.0
 }
-

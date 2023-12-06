@@ -6,14 +6,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/bfontaine/jsons"
-	common_datalayer "github.com/mimiro-io/common-datalayer"
-	egdm "github.com/mimiro-io/entity-graph-data-model"
-	gsf "github.com/snowflakedb/gosnowflake"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/bfontaine/jsons"
+	common_datalayer "github.com/mimiro-io/common-datalayer"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
+	gsf "github.com/snowflakedb/gosnowflake"
 )
 
 func newTmpFileWriter(dataset string) (*os.File, error, func()) {
@@ -70,7 +71,12 @@ func (sf *Snowflake) writeAsGzippedNDJson(file io.Writer, entities []*egdm.Entit
 
 func (sf *Snowflake) getStage(fsId string, dataset string) string {
 	dsName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-	stage := fmt.Sprintf("%s.%s.S_%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema), dsName)
+	stage := fmt.Sprintf(
+		"%s.%s.S_%s",
+		strings.ToUpper(sf.cfg.SnowflakeDB),
+		strings.ToUpper(sf.cfg.SnowflakeSchema),
+		dsName,
+	)
 	fsSuffix := fmt.Sprintf("_FSID_%s", fsId)
 	stage = stage + fsSuffix
 	return stage
@@ -78,7 +84,7 @@ func (sf *Snowflake) getStage(fsId string, dataset string) string {
 
 func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.DatasetDefinition) (string, error) {
 	return withRefresh(sf, func() (string, error) {
-		dbName, schemaName, dsName := sf.tableParts(dataset, mapping)
+		dbName, schemaName, dsName := sf.tableParts(mapping)
 		// construct base stage name from dataset name plus either mapping config or app config as fallback
 		stage := fmt.Sprintf("%s.%s.S_%s", dbName, schemaName, dsName)
 
@@ -113,7 +119,8 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 						sf.log.Info().Msg("No previous full sync stage found for " + dsName)
 					}
 				}
-				sf.log.Info().Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
+				sf.log.Info().
+					Msg("Found previous full sync stage " + existingFsStage + ". Dropping it before new full sync")
 				stmt := fmt.Sprintf("DROP STAGE %s.%s.%s", dbName, schemaName, existingFsStage)
 				_, err = p.db.Exec(stmt)
 				if err != nil {
@@ -142,11 +149,10 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 	})
 }
 
-func (sf *Snowflake) Load(datasetName string, files []string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
+func (sf *Snowflake) Load(files []string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
-
 		return nil, func() error {
-			dbName, schemaName, dsName := sf.tableParts(datasetName, mapping)
+			dbName, schemaName, dsName := sf.tableParts(mapping)
 			nameSpace := fmt.Sprintf("%s.%s", dbName, schemaName)
 			stage := fmt.Sprintf("%s.S_", nameSpace) + dsName
 			tableName := dsName
@@ -159,15 +165,16 @@ func (sf *Snowflake) Load(datasetName string, files []string, batchTimestamp int
 				_ = tx.Rollback()
 			}()
 
+			colNames, columns, colExtractions := sf.colMappings(mapping)
 			if _, err := tx.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s.%s (
   		id varchar,
 		recorded integer,
   		deleted boolean,
   		dataset varchar,
-  		entity variant
+		%s
 	);
-	`, nameSpace, tableName)); err != nil {
+	`, nameSpace, tableName, columns)); err != nil {
 				return err
 			}
 
@@ -175,18 +182,18 @@ func (sf *Snowflake) Load(datasetName string, files []string, batchTimestamp int
 
 			sf.log.Trace().Msgf("Loading %s", fileString)
 			q := fmt.Sprintf(`
-	COPY INTO %s.%s(id, recorded, deleted, dataset, entity)
+	COPY INTO %s.%s(id, recorded, deleted, dataset, %s)
 	    FROM (
 	    	SELECT
  			$1:id::varchar,
 			%v::integer,
- 			$1:deleted::boolean,
+ 			coalesce($1:deleted::boolean, false),
 			'%s'::varchar,
- 			$1::variant
+			%s
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP)
 	FILES = (%s);
-	`, nameSpace, tableName, batchTimestamp, datasetName, stage, fileString)
+	`, nameSpace, tableName, colNames, batchTimestamp, mapping.DatasetName, colExtractions, stage, fileString)
 			sf.log.Trace().Msg(q)
 			if _, err := tx.Query(q); err != nil {
 				return err
@@ -198,12 +205,13 @@ func (sf *Snowflake) Load(datasetName string, files []string, batchTimestamp int
 	return err
 }
 
-func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int64) error {
+func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
 		return nil, func() error {
-			tableName := strings.ToUpper(strings.ReplaceAll(dataset, ".", "_"))
-			tableName = fmt.Sprintf("%s.%s.%s", strings.ToUpper(sf.cfg.SnowflakeDB), strings.ToUpper(sf.cfg.SnowflakeSchema), tableName)
 			loadTableName := stage
+
+			_, _, dsName := sf.tableParts(mapping)
+			tableName := dsName
 
 			tx, err := p.db.Begin()
 			if err != nil {
@@ -212,14 +220,15 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 			defer func() {
 				_ = tx.Rollback()
 			}()
+			_, columns, colExtractions := sf.colMappings(mapping)
 			smt := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
   		id varchar,
 		recorded integer,
   		deleted boolean,
   		dataset varchar,
-  		entity variant);
-	`, loadTableName)
+  		%s);
+	`, loadTableName, columns)
 
 			// println("\n", smt)
 			if _, err := tx.Exec(smt); err != nil {
@@ -233,12 +242,12 @@ func (sf *Snowflake) LoadStage(dataset string, stage string, batchTimestamp int6
 	    	SELECT
  			$1:id::varchar,
 			%v::integer,
- 			$1:deleted::boolean,
+ 			coalesce($1:deleted::boolean, false),
 			'%s'::varchar,
- 			$1::variant
+ 			%s
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP);
-	`, loadTableName, batchTimestamp, dataset, stage)
+	`, loadTableName, batchTimestamp, mapping.DatasetName, colExtractions, stage)
 			sf.log.Trace().Msg(q)
 			if _, err := tx.Query(q); err != nil {
 				return err

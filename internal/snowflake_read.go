@@ -6,10 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+
 	common_datalayer "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 	gsf "github.com/snowflakedb/gosnowflake"
-	"io"
 )
 
 func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping *common_datalayer.DatasetDefinition) error {
