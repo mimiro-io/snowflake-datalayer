@@ -149,6 +149,16 @@ entity property to take the value from: `entity_property`.
 
 Also note that `entity_property` names must be fully expanded (i.e. no namespace prefixes).
 
+#### SQL_EXPR datatype
+
+Normally, the layer will construct an expression like `$1:props:name::string` given `entity_property=name` and `datatype=string`.
+And it will use this expression to extract the column value from the entity. However, if the datatype is set to `SQL_EXPR`,
+the layer will use the value of `entity_property` as the column value. The expression must produce a string(compatible) value.
+
+This can be used to insert static values into the table, or to construct your own expressions. Possible use cases
+include unpacking of array values or nested entities.
+
+
 ### Reading from Snowflake
 
 The layer can be configured to read from tables that do not follow the convention based reading.

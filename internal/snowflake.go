@@ -56,6 +56,11 @@ func (sf *Snowflake) colMappings(mapping *common_datalayer.DatasetDefinition) (s
 		colExtractions = ""
 		for _, col := range mapping.IncomingMappingConfig.PropertyMappings {
 			srcMap := "props"
+			t := col.Datatype
+			// if no datatype is specified, we assume string
+			if t == "" {
+				t = "string"
+			}
 			if col.IsReference {
 				srcMap = "refs"
 			}
@@ -67,11 +72,16 @@ func (sf *Snowflake) colMappings(mapping *common_datalayer.DatasetDefinition) (s
 				columnTypes = fmt.Sprintf("%s, %s BOOLEAN", columnTypes, col.Property)
 				colExtractions = fmt.Sprintf(`%s, $1:deleted::boolean`, colExtractions)
 			} else if col.IsIdentity {
-				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
-				colExtractions = fmt.Sprintf(`%s, $1:id::%s`, colExtractions, col.Datatype)
+				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
+				colExtractions = fmt.Sprintf(`%s, $1:id::%s`, colExtractions, t)
+			} else if strings.ToUpper(t) == "SQL_EXPR" {
+				// if type is SQL_EXPR, we expect the entity property to be a SQL expression,
+				// like "now()::timestamp" or "$1.props:myprop::string"
+				columnTypes = fmt.Sprintf("%s, %s STRING", columnTypes, col.Property)
+				colExtractions = fmt.Sprintf(`%s, %s`, colExtractions, col.EntityProperty)
 			} else {
-				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
-				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s`, colExtractions, srcMap, col.EntityProperty, col.Datatype)
+				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
+				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s`, colExtractions, srcMap, col.EntityProperty, t)
 			}
 		}
 	}
