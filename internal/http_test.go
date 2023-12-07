@@ -30,7 +30,7 @@ var _ = Describe("The web server", Serial, func() {
 	var cfg *Config
 	cnt := 0
 	BeforeEach(func() {
-		// LoadLogger("console", "test", "debug")
+		//LoadLogger("console", "test", "debug")
 		cnt++
 		var err error
 		db, mock, err = sqlmock.NewWithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
@@ -418,7 +418,7 @@ var _ = Describe("The web server", Serial, func() {
 			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB.SFS.POTATOE \\( id varchar, recorded integer," +
 				" deleted boolean, dataset varchar, entity variant \\);").WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery("COPY INTO SFDB.SFS.POTATOE\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
-				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'sfdb.sfs.potatoe'::varchar, \\$1::variant FROM @SFDB.SFS.S_POTATOE" +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'sfdb.sfs.potatoe'::varchar, \\$1::variant FROM @SFDB.SFS.S_POTATOE" +
 				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
 			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 			mock.ExpectCommit()
@@ -496,7 +496,7 @@ var _ = Describe("The web server", Serial, func() {
 			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB2.SFS2.POTATOE \\( id varchar, recorded integer," +
 				" deleted boolean, dataset varchar, foo varchar, ok boolean, num integer, baz varchar \\);").WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery("COPY INTO SFDB2.SFS2.POTATOE\\(id, recorded, deleted, dataset, foo, ok, num, baz\\) FROM \\( " +
-				"SELECT \\$1:id::varchar, \\d+::integer, \\$1:deleted::boolean, 'potatoes'::varchar, " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoes'::varchar, " +
 				"\\$1:props:\"foo\"::varchar, " +
 				"\\$1:props:\"ok\"::boolean, " +
 				"\\$1:props:\"num\"::integer, " +
