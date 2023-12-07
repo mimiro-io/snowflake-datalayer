@@ -220,7 +220,7 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
 			defer func() {
 				_ = tx.Rollback()
 			}()
-			_, columns, colExtractions := sf.colMappings(mapping)
+			colNames, columns, colExtractions := sf.colMappings(mapping)
 			smt := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
   		id varchar,
@@ -237,7 +237,7 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
 
 			sf.log.Trace().Msgf("Loading fs table %s", loadTableName)
 			q := fmt.Sprintf(`
-	COPY INTO %s(id, recorded, deleted, dataset, entity)
+	COPY INTO %s(id, recorded, deleted, dataset, %s)
 	    FROM (
 	    	SELECT
  			$1:id::varchar,
@@ -247,7 +247,7 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
  			%s
 	    	FROM @%s)
 	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP);
-	`, loadTableName, batchTimestamp, mapping.DatasetName, colExtractions, stage)
+	`, loadTableName, colNames, batchTimestamp, mapping.DatasetName, colExtractions, stage)
 			sf.log.Trace().Msg(q)
 			if _, err := tx.Query(q); err != nil {
 				return err
