@@ -46,7 +46,12 @@ func (c *Config) common() *flag.FlagSet {
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	fs.StringVar(&c.LogType, "log-type", "console", "Determines log type. Valid are console or json.")
 	fs.StringVar(&c.LogLevel, "log-level", "info", "Log level. error, warn, trace, debug or info.")
-	fs.StringVar(&c.ServiceName, "service", "datahub-snowflake-datalayer", "Override service name. For logging purposes.")
+	fs.StringVar(
+		&c.ServiceName,
+		"service",
+		"datahub-snowflake-datalayer",
+		"Override service name. For logging purposes.",
+	)
 	fs.StringVar(&c.SnowflakeUser, "snowflake-user", "", "Snowflake username. Required.")
 	fs.StringVar(&c.SnowflakePassword, "snowflake-password", "", "Snowflake password. Required.")
 	fs.StringVar(&c.SnowflakeAccount, "snowflake-account", "", "Snowflake account to use.")
@@ -80,7 +85,12 @@ func (c *Config) ServerFlags() *flag.FlagSet {
 	fs.StringVar(&c.TokenIssuer, "issuer", "", "either a jwt issuer or a node:<id> issuer if public key is set")
 	fs.StringVar(&c.TokenAudience, "audience", "", "either a jwt audience or a node:<id> audience if public key is set")
 	// fs.StringVar(&c.NodePublicKey, "public-key", "", "DataHub public key. Enables public key access.")
-	fs.StringVar(&c.Authenticator, "authenticator", "jwt", "middleware for authentication. 'noop' disables auth, jwt enables it")
+	fs.StringVar(
+		&c.Authenticator,
+		"authenticator",
+		"jwt",
+		"middleware for authentication. 'noop' disables auth, jwt enables it",
+	)
 	return fs
 }
 

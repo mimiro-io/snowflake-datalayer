@@ -56,4 +56,3 @@ var _ = Describe("The config loader", func() {
 		Expect(cfg.DsMappings[0].SourceConfig[TableName]).To(Equal("customers"))
 	})
 })
-

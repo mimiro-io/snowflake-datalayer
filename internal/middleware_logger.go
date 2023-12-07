@@ -68,7 +68,15 @@ func LoggerFilter(config LoggerConfig) echo.MiddlewareFunc {
 			_ = config.m.Timing("http.time", timed, tags, 1)
 			_ = config.m.Gauge("http.size", float64(res.Size), tags, 1)
 
-			msg := fmt.Sprintf("%d - %s %s (time: %s, size: %d, user_agent: %s)", res.Status, req.Method, req.RequestURI, timed.String(), res.Size, req.UserAgent())
+			msg := fmt.Sprintf(
+				"%d - %s %s (time: %s, size: %d, user_agent: %s)",
+				res.Status,
+				req.Method,
+				req.RequestURI,
+				timed.String(),
+				res.Size,
+				req.UserAgent(),
+			)
 
 			l := config.log.Debug().
 				Str("time", timed.String()).

@@ -17,11 +17,14 @@ RUN go mod download
 FROM build_env as builder
 
 # Copy the source from the current directory to the Working Directory inside the container
-COPY . .
+COPY cmd cmd
+COPY internal internal
+COPY testdata testdata
+
 # Build the Go app
 RUN go vet ./...
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o flake cmd/flake/main.go
-
+RUN go test -v ./...
 # enable the app to run as any non root user
 RUN chgrp 0 flake && chmod g+X flake
 
@@ -44,9 +47,9 @@ ENV LOG_TYPE=json \
     SNOWFLAKE_ACCOUNT=<account> \
     SNOWFLAKE_DB=<db> \
     SNOWFLAKE_SCHEMA=<schema> \
-    WELL_KNOWN=https://auth.dev.mimiro.io/jwks/.well-known/jwks.json \
-    ISSUER=https://api.dev.mimiro.io \
-    AUDIENCE=https://api.dev.mimiro.io \
+    WELL_KNOWN=https://<auth.srv>/.well-known/jwks.json \
+    ISSUER=https://<auth.srv> \
+    AUDIENCE=https://<app.host> \
     AUTHENTICATOR=jwt \
     HOME=/ \
     USER=5678
