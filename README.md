@@ -128,6 +128,9 @@ and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWF
   "incoming_mapping_config": {
     "base_uri": "http://example.com",
     "property_mappings": [{
+        "Custom": {
+            "expression": "expression to extract the value from the entity"
+        }, // optional, if set, the layer will use this expression to extract the value from the entity
         "required": true,
         "entity_property": "property name in the entity",
         "property": "name of the column in the table",
@@ -148,6 +151,16 @@ A typical property mapping needs to specify the column name: `property`, the col
 entity property to take the value from: `entity_property`.
 
 Also note that `entity_property` names must be fully expanded (i.e. no namespace prefixes).
+
+#### Custom expressions for entity properties
+
+Normally, the layer will construct an expression like `$1:props:"name"::string`, given `entity_property=name` and `datatype=string`.
+And it will use this expression to extract the column value from each entity.
+If a mapping contains a custom expression, it will be applied instead of the default expression.
+
+This can be used to insert static values into the table, or to wrap the json-path based entity access expressions with
+additional sql transformation. Possible use cases include unpacking of array values or nested entities.
+
 
 ### Reading from Snowflake
 
