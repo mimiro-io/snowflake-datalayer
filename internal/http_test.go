@@ -423,7 +423,7 @@ var _ = Describe("The web server", Serial, func() {
 			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 			mock.ExpectCommit()
 
-			res, err := http.Post("http://localhost:17866/datasets/sfdb.sfs.potatoe/entities", "application/json",
+			res, err := http.Post("http://localhost:17866/datasets/potatoe/entities", "application/json",
 				strings.NewReader(`[{"id": "@context", "namespaces": {
 "x": "http://snowflake/foo/",
 "y": "http://snowflake/bar/",

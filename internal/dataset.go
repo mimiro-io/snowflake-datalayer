@@ -29,7 +29,7 @@ func NewDataset(cfg *Config, sf *Snowflake) *Dataset {
 
 func (ds *Dataset) WriteFs(ctx context.Context, info dsInfo, reader io.Reader) error {
 	var stage string
-	mappings, err := ds.GetDatasetMapping(info)
+	mappings, err := ds.GetDatasetMapping(info, true)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (ds *Dataset) Write(ctx context.Context, info dsInfo, reader io.Reader) err
 	entities := make([]*egdm.Entity, 0)
 	files := make([]string, 0)
 
-	mappings, err := ds.GetDatasetMapping(info)
+	mappings, err := ds.GetDatasetMapping(info, true)
 	if err != nil {
 		return err
 	}
@@ -142,19 +142,28 @@ func (ds *Dataset) Write(ctx context.Context, info dsInfo, reader io.Reader) err
 }
 
 func (ds *Dataset) ReadAll(ctx context.Context, writer io.Writer, dsInfo dsInfo) error {
-	mapping, err := ds.GetDatasetMapping(dsInfo)
+	mapping, err := ds.GetDatasetMapping(dsInfo, false)
 	if err != nil {
 		return err
 	}
 	return ds.sf.ReadAll(ctx, writer, dsInfo, mapping)
 }
 
-func (ds *Dataset) GetDatasetMapping(dsInfo dsInfo) (*common_datalayer.DatasetDefinition, error) {
+func (ds *Dataset) GetDatasetMapping(dsInfo dsInfo, write bool) (*common_datalayer.DatasetDefinition, error) {
 	mapping, err := ds.cfg.Mapping(dsInfo.name)
 	if err != nil {
-		LOG.Info().Msg("Failed to get mapping for dataset " + dsInfo.name + ". Trying implicit mapping.")
+		LOG.Debug().Msg("Failed to get mapping for dataset " + dsInfo.name + ". Trying implicit mapping.")
+
+		// in read mode, we expect the dataset name to contain db and schema in the form db.schema.table
+		impName := dsInfo.name
+		if write {
+			// in write mode. we only allow writing to the configured db and schema, so the name is just the table name
+			// implicitWriteName is used to construct the full name in write mode
+			impName = strings.ReplaceAll(dsInfo.name, ".", "_")
+			impName = fmt.Sprintf("%s.%s.%s", ds.cfg.SnowflakeDB, ds.cfg.SnowflakeSchema, impName)
+		}
 		var err2 error
-		mapping, err2 = implicitMapping(dsInfo.name)
+		mapping, err2 = implicitMapping(impName)
 		if err2 != nil {
 			LOG.Error().Err(err2).Msg("Failed to get implicit mapping for dataset " + dsInfo.name + ".")
 			return nil, fmt.Errorf("no table mapping: %w, %w", err, err2)
