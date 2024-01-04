@@ -36,6 +36,15 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 				sf.log.Error().Err(err).Msg("Failed to decode since token")
 				return err
 			}
+			if mapping.SourceConfig[Role] != nil {
+				roleQuery := fmt.Sprintf("USE ROLE %s", mapping.SourceConfig[Role])
+				_, err = p.db.ExecContext(ctx, roleQuery)
+				if err != nil {
+					sf.log.Error().Err(err).Msg("Failed to set new role.")
+					return err
+				}
+			}
+
 			token := info.since
 			newSince := ""
 			if sinceActive {

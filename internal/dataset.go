@@ -176,6 +176,7 @@ const (
 	TableName   = "table_name"
 	Schema      = "schema"
 	Database    = "database"
+	Role        = "role"
 	RawColumn   = "raw_column"
 	SinceColumn = "since_column"
 	// DefaultType = "default_type"
