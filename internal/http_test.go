@@ -30,14 +30,15 @@ var _ = Describe("The web server", Serial, func() {
 	var cfg *Config
 	cnt := 0
 	BeforeEach(func() {
-		//LoadLogger("console", "test", "debug")
+		LoadLogger("console", "test", "debug")
 		cnt++
 		var err error
 		db, mock, err = sqlmock.NewWithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &Config{SnowflakeDB: "sfdb", SnowflakeSchema: "sfs"}
-		p = &pool{db: db}
+		p = &pool{_db: db}
 		mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
 		server, err = NewServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -81,6 +82,7 @@ var _ = Describe("The web server", Serial, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(bodyBytes)).To(Equal("{\"message\":\"No mapping for dataset\"}\n"))
 			Expect(resp.StatusCode).To(Equal(400))
+			db, mock, _ = sqlmock.New()
 		})
 		// ideally, it should return 400, but it returns 500 because we dont check what the underlying query error actually is caused by
 		It("should return 500 if table not found", func() {

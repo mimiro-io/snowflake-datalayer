@@ -15,7 +15,7 @@ import (
 
 func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
-		return nil, func() error {
+		return WithConn(p, ctx, func(conn *sql.Conn) (any, error) {
 			var err error
 			var rows *sql.Rows
 			var query string
@@ -34,15 +34,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			sinceVal, err := base64.URLEncoding.DecodeString(info.since)
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to decode since token")
-				return err
-			}
-			if mapping.SourceConfig[Role] != nil {
-				roleQuery := fmt.Sprintf("USE ROLE %s", mapping.SourceConfig[Role])
-				_, err = p.db.ExecContext(ctx, roleQuery)
-				if err != nil {
-					sf.log.Error().Err(err).Msg("Failed to set new role.")
-					return err
-				}
+				return nil, err
 			}
 
 			token := info.since
@@ -56,10 +48,10 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 					maxQ = fmt.Sprintf("%s WHERE %s > %s", maxQ, sinceColumn, sinceVal)
 				}
 				sf.log.Debug().Msg(maxQ)
-				row := p.db.QueryRowContext(ctx, maxQ)
+				row := conn.QueryRowContext(ctx, maxQ)
 				if row.Err() != nil {
 					sf.log.Error().Err(row.Err()).Msg("Failed to read new since value")
-					return row.Err()
+					return nil, row.Err()
 				}
 				row.Scan(&res)
 
@@ -83,10 +75,10 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 
 			sf.log.Debug().Msg(query)
 			qctx := gsf.WithStreamDownloader(ctx)
-			rows, err = p.db.QueryContext(qctx, query)
+			rows, err = conn.QueryContext(qctx, query)
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to query snowflake")
-				return err
+				return nil, err
 			}
 			defer rows.Close()
 
@@ -95,7 +87,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			colTypes, err := rows.ColumnTypes()
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to access query result column types")
-				return err
+				return nil, err
 			}
 			rowLine := make([]any, len(colTypes))
 
@@ -109,7 +101,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 				err = rows.Scan(rowLine...)
 				if err != nil {
 					sf.log.Error().Err(err).Msg("Failed to scan row")
-					return err
+					return nil, err
 				}
 				var jsonEntity string
 				if mapping.SourceConfig[RawColumn] != nil {
@@ -119,11 +111,11 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 					err = mapper.MapItemToEntity(rowItem(rowLine, colTypes), entity)
 					if err != nil {
 						sf.log.Error().Err(err).Msg("Failed to map row")
-						return err
+						return nil, err
 					}
 					jsonBytes, err2 := json.Marshal(entity)
 					if err2 != nil {
-						return err2
+						return nil, err2
 					}
 					jsonEntity = string(jsonBytes)
 				}
@@ -132,7 +124,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 				if !headerWritten {
 					err2 := sf.writeHeader(writer, mapping)
 					if err2 != nil {
-						return err2
+						return nil, err2
 					}
 
 					headerWritten = true
@@ -141,19 +133,19 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 				_, err2 := fmt.Fprint(writer, ",\n"+jsonEntity)
 				if err2 != nil {
 					sf.log.Error().Err(err2).Msg("Failed to write entity to http writer")
-					return err2
+					return nil, err2
 				}
 			}
 			if err = rows.Err(); err != nil {
 				sf.log.Error().Err(err).Msg("Failed to read rows")
-				return err
+				return nil, err
 			}
 
 			// when there was an empty result, we still need to write the header
 			if !headerWritten {
 				err := sf.writeHeader(writer, mapping)
 				if err != nil {
-					return err
+					return nil, err
 				}
 			}
 			// append continuation token if sinceActive
@@ -164,10 +156,10 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			// close batch
 			_, err = fmt.Fprintln(writer, "]")
 			if err != nil {
-				return err
+				return nil, err
 			}
-			return nil
-		}()
+			return nil, nil
+		})
 	})
 	return err
 }
