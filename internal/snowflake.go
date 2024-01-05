@@ -27,23 +27,19 @@ var p *pool
 // make sure all pooled connections have the correct session settings
 func WithConn[T any](p *pool, ctx context.Context, f func(*sql.Conn) (T, error)) (T, error) {
 	var result T
-	openBefore := p._db.Stats().OpenConnections
 	conn, err := p._db.Conn(ctx)
-	openAfter := p._db.Stats().OpenConnections
 	if err != nil {
 		return result, err
 	}
 	defer conn.Close()
-	if openAfter > openBefore {
-		_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
-		if err != nil {
-			return result, err
-		}
-		// activate secondary roles
-		_, err = conn.ExecContext(ctx, "USE SECONDARY ROLES ALL;")
-		if err != nil {
-			return result, err
-		}
+	_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
+	if err != nil {
+		return result, err
+	}
+	// activate secondary roles
+	_, err = conn.ExecContext(ctx, "USE SECONDARY ROLES ALL;")
+	if err != nil {
+		return result, err
 	}
 	result, err = f(conn)
 	return result, err
