@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
@@ -18,10 +19,31 @@ import (
 )
 
 type pool struct {
-	db *sql.DB
+	_db *sql.DB
 }
 
 var p *pool
+
+// make sure all pooled connections have the correct session settings
+func WithConn[T any](p *pool, ctx context.Context, f func(*sql.Conn) (T, error)) (T, error) {
+	var result T
+	conn, err := p._db.Conn(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer conn.Close()
+	_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
+	if err != nil {
+		return result, err
+	}
+	// activate secondary roles
+	_, err = conn.ExecContext(ctx, "USE SECONDARY ROLES ALL;")
+	if err != nil {
+		return result, err
+	}
+	result, err = f(conn)
+	return result, err
+}
 
 type Snowflake struct {
 	cfg        *Config
@@ -129,7 +151,7 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 		}
 	}
 
-	if p == nil || p.db == nil {
+	if p == nil || p._db == nil {
 		LOG.Info().Msg("opening db")
 		db, err := sql.Open("snowflake", connectionString)
 		// snowflake tokens time out, after 4 hours with default session settings.
@@ -142,14 +164,10 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 		}
 
 		p = &pool{
-			db: db,
+			_db: db,
 		}
 	}
-	LOG.Info().Msg(fmt.Sprintf("start or refresh happening. database connection stats: %+v", p.db.Stats()))
-	_, err := p.db.Exec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
-	if err != nil {
-		return nil, err
-	}
+	LOG.Info().Msg(fmt.Sprintf("start or refresh happening. database connection stats: %+v", p._db.Stats()))
 	return &Snowflake{
 		cfg:        cfg,
 		log:        LOG.With().Str("logger", "snowflake").Logger(),
