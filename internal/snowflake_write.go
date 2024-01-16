@@ -102,19 +102,20 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 				query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + dbName + "." + schemaName
 				query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
 				// println(query)
-				ctx, err := gsf.WithMultiStatement(context.Background(), 2)
-				if err != nil {
-					sf.log.Error().Err(err).Msg("Failed to create multistatement context")
-					return "", err
-				}
+				ctx := context.Background()
 				rows, err := WithConn(p, ctx, func(conn *sql.Conn) (*sql.Rows, error) {
-					return conn.QueryContext(ctx, query)
+					mctx, err := gsf.WithMultiStatement(context.Background(), 2)
+					if err != nil {
+						sf.log.Error().Err(err).Msg("Failed to create multistatement context")
+						return nil, err
+					}
+					return conn.QueryContext(mctx, query)
 				})
-				defer rows.Close()
 				if err != nil {
 					sf.log.Error().Err(err).Msg("Failed to query stages")
 					return "", err
 				}
+				defer rows.Close()
 
 				var existingFsStage string
 				rows.NextResultSet() // skip to 2nd statement result
