@@ -104,7 +104,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 				// println(query)
 				ctx := context.Background()
 				rows, err := WithConn(p, ctx, func(conn *sql.Conn) (*sql.Rows, error) {
-					mctx, err := gsf.WithMultiStatement(context.Background(), 2)
+					mctx, err := gsf.WithMultiStatement(ctx, 2)
 					if err != nil {
 						sf.log.Error().Err(err).Msg("Failed to create multistatement context")
 						return nil, err
