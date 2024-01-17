@@ -111,11 +111,18 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 					}
 					return conn.QueryContext(mctx, query)
 				})
+				defer func() {
+					if rows != nil {
+						closeErr := rows.Close()
+						if closeErr != nil {
+							sf.log.Error().Err(closeErr).Msg("Failed to close rows")
+						}
+					}
+				}()
 				if err != nil {
 					sf.log.Error().Err(err).Msg("Failed to query stages")
 					return "", err
 				}
-				defer rows.Close()
 
 				var existingFsStage string
 				rows.NextResultSet() // skip to 2nd statement result
