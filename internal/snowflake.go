@@ -28,10 +28,14 @@ var p *pool
 func WithConn[T any](p *pool, ctx context.Context, f func(*sql.Conn) (T, error)) (T, error) {
 	var result T
 	conn, err := p._db.Conn(ctx)
+	defer func() {
+		if conn != nil {
+			conn.Close()
+		}
+	}()
 	if err != nil {
 		return result, err
 	}
-	defer conn.Close()
 	_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
 	if err != nil {
 		return result, err

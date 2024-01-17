@@ -76,11 +76,15 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			sf.log.Debug().Msg(query)
 			qctx := gsf.WithStreamDownloader(ctx)
 			rows, err = conn.QueryContext(qctx, query)
+			defer func() {
+				if rows != nil {
+					rows.Close()
+				}
+			}()
 			if err != nil {
 				sf.log.Error().Err(err).Msg("Failed to query snowflake")
 				return nil, err
 			}
-			defer rows.Close()
 
 			var headerWritten bool
 
