@@ -47,14 +47,19 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.
 		// then upload to staging
 		files := make([]string, 0)
 		sf.log.Debug().Msgf("Uploading %s", file.Name())
-		_, err = WithConn(p, context.Background(), func(conn *sql.Conn) (any, error) {
-			rows, err := conn.QueryContext(context.Background(),
+		ctx := context.Background()
+		_, err = WithConn(p, ctx, func(conn *sql.Conn) (any, error) {
+			rows, err2 := conn.QueryContext(ctx,
 				fmt.Sprintf("PUT file://%s @%s auto_compress=false overwrite=false", file.Name(), stage),
 			)
-			if err != nil {
-				return nil, err
+			defer func() {
+				if rows != nil {
+					rows.Close()
+				}
+			}()
+			if err2 != nil {
+				return nil, err2
 			}
-			rows.Close()
 
 			return nil, nil
 		})
@@ -90,7 +95,8 @@ func (sf *Snowflake) getStage(fsId string, dataset string) string {
 
 func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.DatasetDefinition) (string, error) {
 	return withRefresh(sf, func() (string, error) {
-		return WithConn(p, context.Background(), func(conn *sql.Conn) (string, error) {
+		ctx := context.Background()
+		return WithConn(p, ctx, func(conn *sql.Conn) (string, error) {
 			dbName, schemaName, dsName := sf.tableParts(mapping)
 			// construct base stage name from dataset name plus either mapping config or app config as fallback
 			stage := fmt.Sprintf("%s.%s.S_%s", dbName, schemaName, dsName)
@@ -102,15 +108,13 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 				query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + dbName + "." + schemaName
 				query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
 				// println(query)
-				ctx := context.Background()
-				rows, err := WithConn(p, ctx, func(conn *sql.Conn) (*sql.Rows, error) {
-					mctx, err := gsf.WithMultiStatement(ctx, 2)
-					if err != nil {
-						sf.log.Error().Err(err).Msg("Failed to create multistatement context")
-						return nil, err
-					}
-					return conn.QueryContext(mctx, query)
-				})
+				mctx, err := gsf.WithMultiStatement(ctx, 2)
+				if err != nil {
+					sf.log.Error().Err(err).Msg("Failed to create multistatement context")
+					return "", err
+				}
+				rows, err := conn.QueryContext(mctx, query)
+
 				defer func() {
 					if rows != nil {
 						closeErr := rows.Close()
@@ -157,7 +161,7 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 	    file_format = (TYPE='json' STRIP_OUTER_ARRAY = TRUE);
 	`, stage)
 			sf.log.Trace().Msg(q)
-			_, err := conn.ExecContext(context.Background(), q)
+			_, err := conn.ExecContext(ctx, q)
 			if err != nil {
 				sf.log.Warn().Msg("Failed to create/ensure stage")
 				return "", err
@@ -170,13 +174,14 @@ func (sf *Snowflake) mkStage(fsId, dataset string, mapping *common_datalayer.Dat
 func (sf *Snowflake) Load(files []string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
 		return nil, func() error {
-			_, err := WithConn(p, context.Background(), func(conn *sql.Conn) (any, error) {
+			ctx := context.Background()
+			_, err := WithConn(p, ctx, func(conn *sql.Conn) (any, error) {
 				dbName, schemaName, dsName := sf.tableParts(mapping)
 				nameSpace := fmt.Sprintf("%s.%s", dbName, schemaName)
 				stage := fmt.Sprintf("%s.S_", nameSpace) + dsName
 				tableName := dsName
 
-				tx, err := conn.BeginTx(context.Background(), nil)
+				tx, err := conn.BeginTx(ctx, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -228,14 +233,15 @@ func (sf *Snowflake) Load(files []string, batchTimestamp int64, mapping *common_
 
 func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *common_datalayer.DatasetDefinition) error {
 	_, err := withRefresh(sf, func() (any, error) {
-		return WithConn(p, context.Background(), func(conn *sql.Conn) (any, error) {
+		ctx := context.Background()
+		return WithConn(p, ctx, func(conn *sql.Conn) (any, error) {
 			return nil, func() error {
 				loadTableName := stage
 
 				_, _, dsName := sf.tableParts(mapping)
 				tableName := dsName
 
-				tx, err := conn.BeginTx(context.Background(), nil)
+				tx, err := conn.BeginTx(ctx, nil)
 				if err != nil {
 					return err
 				}
@@ -253,8 +259,8 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
 	`, loadTableName, columns)
 
 				// println("\n", smt)
-				if _, err := tx.Exec(smt); err != nil {
-					return err
+				if _, err2 := tx.Exec(smt); err2 != nil {
+					return err2
 				}
 
 				sf.log.Trace().Msgf("Loading fs table %s", loadTableName)
@@ -271,8 +277,8 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
 	FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP);
 	`, loadTableName, colNames, batchTimestamp, mapping.DatasetName, colExtractions, stage)
 				sf.log.Trace().Msg(q)
-				if _, err := tx.Query(q); err != nil {
-					return err
+				if _, err2 := tx.Query(q); err2 != nil {
+					return err2
 				}
 
 				_, err = tx.Exec(fmt.Sprintf("ALTER STAGE %s RENAME TO %s", stage, stage+"_DONE"))
