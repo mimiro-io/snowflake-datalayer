@@ -8,13 +8,15 @@ import (
 )
 
 func main() {
+	// either pass in command argument or set DATALAYER_CONFIG_PATH environment variable.
+	// if nothing is set, the ServiceRunner defaults to ./config
+	configFolderLocation := ""
 	args := os.Args[1:]
-	configFolderLocation := os.Environ()["CONFIG_LOCATION"]
 	if len(args) >= 1 {
 		configFolderLocation = args[0]
 	}
 	common.NewServiceRunner(layer.NewSnowflakeDataLayer).
 		WithConfigLocation(configFolderLocation).
-		// WithEnrichConfig(EnrichConfig).
+		WithEnrichConfig(layer.EnvOverrides).
 		StartAndWait()
 }
