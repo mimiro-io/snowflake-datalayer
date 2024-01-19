@@ -30,12 +30,13 @@ func (dl *SnowflakeDataLayer) Dataset(dataset string) (common.Dataset, common.La
 
 	// construct implicit mapping if not found
 	dl.logger.Debug("Failed to get mapping for dataset " + dataset + ". Trying implicit mapping.")
-	ds = &Dataset{name: dataset, db: dl.db}
+	ds = &Dataset{name: dataset, db: dl.db, logger: dl.logger}
 
 	// in read mode, we expect the dataset name to contain db and schema in the form db.schema.table
 	readMapping, err := implicitMapping(dataset)
 	if err == nil {
 		ds.sourceConfig = readMapping.SourceConfig
+		ds.datasetDefinition = readMapping
 		dl.logger.Debug(fmt.Sprintf("infered implicit target table[r]: %+v", ds.sourceConfig))
 		return ds, nil
 	}
@@ -48,6 +49,7 @@ func (dl *SnowflakeDataLayer) Dataset(dataset string) (common.Dataset, common.La
 	writeMapping, err := implicitMapping(impWriteName)
 	if err == nil {
 		ds.sourceConfig = writeMapping.SourceConfig
+		ds.datasetDefinition = writeMapping
 		dl.logger.Debug(fmt.Sprintf("infered implicit target table[w]: %+v", ds.sourceConfig))
 		return ds, nil
 	}
@@ -76,6 +78,9 @@ func NewSnowflakeDataLayer(conf *common.Config, logger common.Logger, metrics co
 	}
 
 	sfdb, err := newSfDB(conf, logger, metrics)
+	if err != nil {
+		return nil, err
+	}
 
 	l := &SnowflakeDataLayer{
 		datasets: map[string]*Dataset{},

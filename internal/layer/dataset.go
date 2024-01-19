@@ -2,43 +2,73 @@ package layer
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
-	common_datalayer "github.com/mimiro-io/common-datalayer"
+	common "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 )
 
 type db interface {
-	putEntities(datasetName string, stage string, entities []*egdm.Entity) ([]string, error)
+	newConnection(ctx context.Context) (*sql.Conn, error)
+	putEntities(ctx context.Context, datasetName string, stage string, entities []*egdm.Entity) ([]string, error)
+	mkStage(ctx context.Context, syncID string, datasetName string, datasetDefinition *common.DatasetDefinition) (string, error)
+	getFsStage(syncId string, datasetDefinition *common.DatasetDefinition) string
+	loadStage(ctx context.Context, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error
+	load(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error
 }
 
 type Dataset struct {
-	mapper       *common_datalayer.Mapper
-	sourceConfig map[string]any
-	name         string
-	db           db
+	logger            common.Logger
+	db                db
+	datasetDefinition *common.DatasetDefinition
+	sourceConfig      map[string]any
+	name              string
 }
 
-// Changes implements common_datalayer.Dataset.
-func (ds *Dataset) Changes(since string, take int, latestOnly bool) (common_datalayer.EntityIterator, common_datalayer.LayerError) {
+// Changes implements common.Dataset.
+func (ds *Dataset) Changes(since string, take int, latestOnly bool) (common.EntityIterator, common.LayerError) {
 	panic("unimplemented")
 }
 
-// Entities implements common_datalayer.Dataset.
-func (ds *Dataset) Entities(since string, take int) (common_datalayer.EntityIterator, common_datalayer.LayerError) {
+// Entities implements common.Dataset.
+func (ds *Dataset) Entities(since string, take int) (common.EntityIterator, common.LayerError) {
 	panic("unimplemented")
 }
 
-// Incremental implements common_datalayer.Dataset.
-func (ds *Dataset) Incremental(ctx context.Context) (common_datalayer.DatasetWriter, common_datalayer.LayerError) {
-	panic("unimplemented")
-}
-
-// MetaData implements common_datalayer.Dataset.
+// MetaData implements common.Dataset.
 func (ds *Dataset) MetaData() map[string]any {
 	panic("unimplemented")
 }
 
-// Name implements common_datalayer.Dataset.
+// Name implements common.Dataset.
 func (ds *Dataset) Name() string {
-	panic("unimplemented")
+	return ds.name
+}
+
+func (ds *Dataset) dbCtx(ctx context.Context) (context.Context, func(), error) {
+	ctx = context.WithValue(ctx, Recorded, time.Now().UnixNano())
+	conn, err := ds.db.newConnection(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
+	if err != nil {
+		return nil, nil, err
+	}
+	// activate secondary roles
+	_, err = conn.ExecContext(ctx, "USE SECONDARY ROLES ALL;")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx = context.WithValue(ctx, Connection, conn)
+	return ctx, func() {
+		if ctx.Value(Connection) != nil {
+			ctx.Value(Connection).(*sql.Conn).Close()
+		} else {
+			ds.logger.Error("No connection to close")
+		}
+	}, nil
 }

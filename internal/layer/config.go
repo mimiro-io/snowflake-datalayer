@@ -8,6 +8,13 @@ import (
 	common "github.com/mimiro-io/common-datalayer"
 )
 
+type CtxKey int
+
+const (
+	Connection CtxKey = iota
+	Recorded
+)
+
 var (
 	ErrNoImplicitDataset = common.Errorf(common.LayerErrorBadParameter, "no implicit mapping for dataset")
 	ErrQuery             = common.Errorf(common.LayerErrorInternal, "failed to query snowflake")
@@ -31,9 +38,6 @@ const (
 	SnowflakeAccount    = "snowflake_account"
 	SnowflakeWarehouse  = "snowflake_warehouse"
 	SnowflakePrivateKey = "snowflake_private_key"
-
-	// other
-	Recorded = "recorded"
 )
 
 func sysConfStr(conf *common.Config, key string) string {
@@ -111,9 +115,8 @@ func (dl *SnowflakeDataLayer) UpdateConfiguration(config *common.Config) common.
 		for _, dsd := range config.DatasetDefinitions {
 			if k == dsd.DatasetName {
 				existingDatasets[k] = true
-				mapper := common.NewMapper(dl.logger, dsd.IncomingMappingConfig, dsd.OutgoingMappingConfig)
-				v.mapper = mapper
 				v.sourceConfig = dsd.SourceConfig
+				v.datasetDefinition = dsd
 			}
 		}
 	}
@@ -127,12 +130,12 @@ func (dl *SnowflakeDataLayer) UpdateConfiguration(config *common.Config) common.
 	// add new datasets
 	for _, dsd := range config.DatasetDefinitions {
 		if _, found := existingDatasets[dsd.DatasetName]; !found {
-			mapper := common.NewMapper(dl.logger, dsd.IncomingMappingConfig, dsd.OutgoingMappingConfig)
 			dl.datasets[dsd.DatasetName] = &Dataset{
-				mapper:       mapper,
-				name:         dsd.DatasetName,
-				sourceConfig: dsd.SourceConfig,
-				db:           dl.db,
+				logger:            dl.logger,
+				name:              dsd.DatasetName,
+				sourceConfig:      dsd.SourceConfig,
+				db:                dl.db,
+				datasetDefinition: dsd,
 			}
 		}
 	}
