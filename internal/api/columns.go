@@ -47,3 +47,14 @@ func ColMappings(mapping *common.DatasetDefinition) (string, string, string) {
 	}
 	return columns[2:], columnTypes[2:], colExtractions[2:]
 }
+
+func ColumnDDL(config *common.OutgoingMappingConfig) string {
+	res := ""
+	for _, mapping := range config.PropertyMappings {
+		if len(res) > 0 {
+			res = res + ", "
+		}
+		res = res + mapping.Property
+	}
+	return res
+}

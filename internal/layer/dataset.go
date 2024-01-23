@@ -15,7 +15,8 @@ type db interface {
 	mkStage(ctx context.Context, syncID string, datasetName string, datasetDefinition *common.DatasetDefinition) (string, error)
 	getFsStage(syncId string, datasetDefinition *common.DatasetDefinition) string
 	loadStage(ctx context.Context, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error
-	load(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error
+	loadFilesInStage(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error
+	createQuery(ctx context.Context, datasetDefinition *common.DatasetDefinition) (query, error)
 }
 
 type Dataset struct {
@@ -28,17 +29,12 @@ type Dataset struct {
 
 // Changes implements common.Dataset.
 func (ds *Dataset) Changes(since string, take int, latestOnly bool) (common.EntityIterator, common.LayerError) {
-	panic("unimplemented")
-}
-
-// Entities implements common.Dataset.
-func (ds *Dataset) Entities(since string, take int) (common.EntityIterator, common.LayerError) {
-	panic("unimplemented")
+	panic("changes not supported. use /datasets/{name}/entities to retrieve full datasets")
 }
 
 // MetaData implements common.Dataset.
 func (ds *Dataset) MetaData() map[string]any {
-	panic("unimplemented")
+	return ds.sourceConfig
 }
 
 // Name implements common.Dataset.

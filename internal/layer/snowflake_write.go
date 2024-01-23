@@ -216,7 +216,7 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 	return tx.Commit()
 }
 
-func (sf *SfDB) load(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
+func (sf *SfDB) loadFilesInStage(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
 	conn := ctx.Value(Connection).(*sql.Conn)
 	dbName, schemaName, dsName := sf.tableParts(datasetDefinition)
 	nameSpace := fmt.Sprintf("%s.%s", dbName, schemaName)

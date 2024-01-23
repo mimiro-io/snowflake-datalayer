@@ -36,9 +36,9 @@ type batchWriter struct {
 	release   func()
 	stage     string
 	entities  []*egdm.Entity
+	files     []string
 	read      int64
 	batchSize int64
-	files     []string
 }
 
 // Close implements common_datalayer.DatasetWriter.
@@ -52,7 +52,7 @@ func (w *batchWriter) Close() common.LayerError {
 	}
 
 	if len(w.files) > 0 {
-		err := w.dataset.db.load(w.ctx, w.files, w.stage, w.ctx.Value(Recorded).(int64), w.dataset.datasetDefinition)
+		err := w.dataset.db.loadFilesInStage(w.ctx, w.files, w.stage, w.ctx.Value(Recorded).(int64), w.dataset.datasetDefinition)
 		if err != nil {
 			return common.Err(err, common.LayerErrorInternal)
 		}

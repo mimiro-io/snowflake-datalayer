@@ -18,7 +18,7 @@ func NewTmpFileWriter(dataset string) (*os.File, func(), error) {
 	return file, finally, nil
 }
 
-func WriteAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, dataset string) error {
+func WriteAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, _ string) error {
 	zipWriter := gzip.NewWriter(file)
 	j := jsons.NewWriter(zipWriter)
 	for _, entity := range entities {

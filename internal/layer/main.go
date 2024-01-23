@@ -18,6 +18,7 @@ type SnowflakeDataLayer struct {
 
 // Dataset implements common_datalayer.DataLayerService.
 func (dl *SnowflakeDataLayer) Dataset(dataset string) (common.Dataset, common.LayerError) {
+	// before we do anything, check memory
 	memErr := dl.assertMemory()
 	if memErr != nil {
 		return nil, memErr
