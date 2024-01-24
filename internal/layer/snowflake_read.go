@@ -182,7 +182,6 @@ func (i *entIter) Next() (*egdm.Entity, common.LayerError) {
 			ri := rowItem(i.rowBuf, i.colTypes)
 			err = i.mapper.MapItemToEntity(ri, entity)
 			if err != nil {
-
 				i.logger.Error("failed to map row", "error", err, "row", fmt.Sprintf("%+v", ri))
 				return nil, common.Err(err, common.LayerErrorInternal)
 			}

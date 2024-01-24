@@ -81,6 +81,12 @@ func EnvOverrides(config *common.Config) error {
 
 // TODO: provide library function which takes a list of required native params?
 func validateConfig(conf *common.Config) error {
+	if conf.LayerServiceConfig == nil {
+		return fmt.Errorf("missing required layer_config block")
+	}
+	if conf.NativeSystemConfig == nil {
+		return fmt.Errorf("missing required system_config block")
+	}
 	type p struct {
 		v any
 		n string
@@ -139,6 +145,9 @@ func (dl *SnowflakeDataLayer) UpdateConfiguration(config *common.Config) common.
 			}
 		}
 	}
+
+	// TODO: re-apply EnvOverrides? normally native conf should not be both places
+	// but to be sure that the ENV value always is set it would need to be re applied?
 
 	return nil
 }
