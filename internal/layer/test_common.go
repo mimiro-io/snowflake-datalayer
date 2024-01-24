@@ -1,10 +1,16 @@
 package layer
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	common "github.com/mimiro-io/common-datalayer"
+	egdm "github.com/mimiro-io/entity-graph-data-model"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 // TODO: provide mocks in common-datalayer?
@@ -15,7 +21,95 @@ type (
 	testLogger struct {
 		logs []string
 	}
+	testDB struct {
+		db   *sql.DB
+		mock sqlmock.Sqlmock
+	}
+	testQuery struct {
+		limit       int
+		sinceColumn string
+		sinceToken  string
+	}
+	testIter struct {
+		sinceColumn string
+		sinceToken  string
+		entIter
+		limit int
+	}
 )
+
+// run implements query.
+func (q *testQuery) run(ctx context.Context, releaseConn func()) (common.EntityIterator, common.LayerError) {
+	return &testIter{
+		limit:       q.limit,
+		sinceColumn: q.sinceColumn,
+		sinceToken:  q.sinceToken,
+	}, nil
+}
+
+// withLimit implements query.
+func (q *testQuery) withLimit(limit int) (query, error) {
+	q.limit = limit
+	return q, nil
+}
+
+// withSince implements query.
+func (q *testQuery) withSince(sinceColumn string, sinceToken string) (query, error) {
+	q.sinceColumn = sinceColumn
+	q.sinceToken = sinceToken
+	return q, nil
+}
+
+func newTestDB(cnt int) *testDB {
+	ginkgo.GinkgoHelper()
+	db, mock, err := sqlmock.NewWithDSN("M_DB:@host2:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
+	mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("USE SECONDARY ROLES ALL;").WillReturnResult(sqlmock.NewResult(1, 1))
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return &testDB{db: db, mock: mock}
+}
+
+func (tdb *testDB) ExpectConn() {
+	tdb.mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';").WillReturnResult(sqlmock.NewResult(1, 1))
+	tdb.mock.ExpectExec("USE SECONDARY ROLES ALL;").WillReturnResult(sqlmock.NewResult(1, 1))
+}
+
+// createQuery implements db.
+func (*testDB) createQuery(ctx context.Context, datasetDefinition *common.DatasetDefinition) (query, error) {
+	return &testQuery{}, nil
+}
+
+// getFsStage implements db.
+func (*testDB) getFsStage(syncId string, datasetDefinition *common.DatasetDefinition) string {
+	panic("unimplemented")
+}
+
+// loadFilesInStage implements db.
+func (*testDB) loadFilesInStage(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
+	panic("unimplemented")
+}
+
+// loadStage implements db.
+func (*testDB) loadStage(ctx context.Context, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
+	panic("unimplemented")
+}
+
+// mkStage implements db.
+func (*testDB) mkStage(ctx context.Context, syncID string, datasetName string, datasetDefinition *common.DatasetDefinition) (string, error) {
+	panic("unimplemented")
+}
+
+// newConnection implements db.
+func (tdb *testDB) newConnection(ctx context.Context) (*sql.Conn, error) {
+	return tdb.db.Conn(ctx)
+}
+
+// putEntities implements db.
+func (*testDB) putEntities(ctx context.Context, datasetName string, stage string, entities []*egdm.Entity) ([]string, error) {
+	panic("unimplemented")
+}
+
+var _ db = &testDB{} // interface assertion
 
 func (l *testLogger) log(message string, level string, args ...any) {
 	msg := fmt.Sprint(append([]any{message, level}, args...))

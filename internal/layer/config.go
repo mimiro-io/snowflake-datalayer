@@ -146,9 +146,6 @@ func (dl *SnowflakeDataLayer) UpdateConfiguration(config *common.Config) common.
 		}
 	}
 
-	// TODO: re-apply EnvOverrides? normally native conf should not be both places
-	// but to be sure that the ENV value always is set it would need to be re applied?
-
 	return nil
 }
 
