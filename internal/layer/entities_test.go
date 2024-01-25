@@ -40,7 +40,7 @@ var _ = Describe("Dataset", func() {
 		Expect(result.(*testIter).sinceToken).To(Equal(""))
 		Expect(result.(*testIter).limit).To(Equal(7))
 
-		// since token is ignored if no since column is set
+		// since token is used if since column is set
 		subject.db.(*testDB).ExpectConn()
 		subject.datasetDefinition.SourceConfig[SinceColumn] = "test_col"
 		result, err = subject.Entities(since, 7)

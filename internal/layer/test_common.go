@@ -26,9 +26,9 @@ type (
 		mock sqlmock.Sqlmock
 	}
 	testQuery struct {
-		limit       int
 		sinceColumn string
 		sinceToken  string
+		limit       int
 	}
 	testIter struct {
 		sinceColumn string
@@ -142,17 +142,10 @@ func (l *testLogger) With(name string, value string) common.Logger {
 	return l
 }
 
-// Gauge implements common_datalayer.Metrics.
 func (*testMetrics) Gauge(s string, f float64, tags []string, i int) common.LayerError {
 	panic("unimplemented")
 }
-
-// Incr implements common_datalayer.Metrics.
-func (*testMetrics) Incr(s string, tags []string, i int) common.LayerError {
-	panic("unimplemented")
-}
-
-// Timing implements common_datalayer.Metrics.
+func (*testMetrics) Incr(s string, tags []string, i int) common.LayerError { panic("unimplemented") }
 func (*testMetrics) Timing(s string, timed time.Duration, tags []string, i int) common.LayerError {
 	panic("unimplemented")
 }
