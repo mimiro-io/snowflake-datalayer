@@ -30,7 +30,7 @@ var _ = Describe("The web server", Serial, func() {
 	var cfg *Config
 	cnt := 0
 	BeforeEach(func() {
-		//LoadLogger("console", "test", "debug")
+		// LoadLogger("console", "test", "debug")
 		cnt++
 		var err error
 		db, mock, err = sqlmock.NewWithDSN("M_DB:@host:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
@@ -406,8 +406,8 @@ var _ = Describe("The web server", Serial, func() {
 		It("PUT gzipped entity files in a stage and load specified files", func() {
 			f, err := os.CreateTemp("", "zip")
 			Expect(err).NotTo(HaveOccurred())
-			server.handler.ds.sf.NewTmpFile = func(ds string) (*os.File, error, func()) {
-				return f, err, func() {}
+			server.handler.ds.sf.NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
 			}
 			defer os.Remove(f.Name())
 
@@ -461,8 +461,8 @@ var _ = Describe("The web server", Serial, func() {
 		It("PUT gzipped mapped files in a stage and load specified files", func() {
 			f, err := os.CreateTemp("", "zip")
 			Expect(err).NotTo(HaveOccurred())
-			server.handler.ds.sf.NewTmpFile = func(ds string) (*os.File, error, func()) {
-				return f, err, func() {}
+			server.handler.ds.sf.NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
 			}
 			defer os.Remove(f.Name())
 

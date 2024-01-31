@@ -13,6 +13,7 @@ import (
 	"time"
 
 	common_datalayer "github.com/mimiro-io/common-datalayer"
+	"github.com/mimiro-io/datahub-snowflake-datalayer/internal/api"
 
 	"github.com/rs/zerolog"
 	gsf "github.com/snowflakedb/gosnowflake"
@@ -52,7 +53,7 @@ func WithConn[T any](p *pool, ctx context.Context, f func(*sql.Conn) (T, error))
 type Snowflake struct {
 	cfg        *Config
 	log        zerolog.Logger
-	NewTmpFile func(dataset string) (*os.File, error, func()) // file, error, function to cleanup file
+	NewTmpFile func(dataset string) (*os.File, func(), error) // file, error, function to cleanup file
 	lock       sync.Mutex
 }
 
@@ -70,48 +71,6 @@ func (sf *Snowflake) tableParts(mapping *common_datalayer.DatasetDefinition) (st
 		schemaName = strings.ToUpper(schema.(string))
 	}
 	return dbName, schemaName, dsName
-}
-
-func (sf *Snowflake) colMappings(mapping *common_datalayer.DatasetDefinition) (string, string, string) {
-	columns := ", entity"
-	columnTypes := ", entity variant"
-	colExtractions := ", $1::variant"
-	if mapping.IncomingMappingConfig != nil && mapping.IncomingMappingConfig.PropertyMappings != nil {
-		columns = ""
-		columnTypes = ""
-		colExtractions = ""
-		for _, col := range mapping.IncomingMappingConfig.PropertyMappings {
-			srcMap := "props"
-			t := col.Datatype
-			// if no datatype is specified, we assume string
-			if t == "" {
-				t = "string"
-			}
-			if col.IsReference {
-				srcMap = "refs"
-			}
-			columns = fmt.Sprintf("%s, %s", columns, col.Property)
-			if col.Custom != nil && col.Custom["expression"] != nil {
-				// if a Custom expression is provided, we expect it to be a SQL expression,
-				// like "now()::timestamp" or "$1.props:myprop::string"
-				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
-				colExtractions = fmt.Sprintf(`%s, %s`, colExtractions, col.Custom["expression"])
-			} else if col.IsRecorded {
-				columnTypes = fmt.Sprintf("%s, %s INTEGER", columnTypes, col.Property)
-				colExtractions = fmt.Sprintf(`%s, $1:recorded::integer`, colExtractions)
-			} else if col.IsDeleted {
-				columnTypes = fmt.Sprintf("%s, %s BOOLEAN", columnTypes, col.Property)
-				colExtractions = fmt.Sprintf(`%s, $1:deleted::boolean`, colExtractions)
-			} else if col.IsIdentity {
-				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
-				colExtractions = fmt.Sprintf(`%s, $1:id::%s`, colExtractions, t)
-			} else {
-				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
-				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s`, colExtractions, srcMap, col.EntityProperty, t)
-			}
-		}
-	}
-	return columns[2:], columnTypes[2:], colExtractions[2:]
 }
 
 func NewSnowflake(cfg *Config) (*Snowflake, error) {
@@ -175,7 +134,7 @@ func NewSnowflake(cfg *Config) (*Snowflake, error) {
 	return &Snowflake{
 		cfg:        cfg,
 		log:        LOG.With().Str("logger", "snowflake").Logger(),
-		NewTmpFile: newTmpFileWriter,
+		NewTmpFile: api.NewTmpFileWriter,
 	}, nil
 }
 

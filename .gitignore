@@ -29,3 +29,6 @@ report.json
 cert/aws_*
 
 local/
+
+# neotest-ginkgo
+suite_test.json

@@ -1,41 +1,29 @@
 package internal
 
 import (
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/bfontaine/jsons"
 	common_datalayer "github.com/mimiro-io/common-datalayer"
+	"github.com/mimiro-io/datahub-snowflake-datalayer/internal/api"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 	gsf "github.com/snowflakedb/gosnowflake"
 )
 
-func newTmpFileWriter(dataset string) (*os.File, error, func()) {
-	file, err := os.CreateTemp("", dataset)
-	if err != nil {
-		return nil, err, nil
-	}
-	finally := func() { os.Remove(file.Name()) }
-	return file, nil, finally
-}
-
 func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.Entity) ([]string, error) {
 	return withRefresh(sf, func() ([]string, error) {
 		// we will handle snowflake in 2 steps, first write each batch as a zipped ndjson file
-		file, err, cleanTmpFile := sf.NewTmpFile(dataset)
+		file, cleanTmpFile, err := sf.NewTmpFile(dataset)
 		if err != nil {
 			return nil, err
 		}
 		defer cleanTmpFile()
 
-		err = sf.writeAsGzippedNDJson(file, entities, dataset)
+		err = api.WriteAsGzippedNDJson(file, entities, dataset)
 		if err != nil {
 			return nil, err
 		}
@@ -69,20 +57,6 @@ func (sf *Snowflake) putEntities(dataset string, stage string, entities []*egdm.
 		files = append(files, filepath.Base(file.Name()))
 		return files, nil
 	})
-}
-
-func (sf *Snowflake) writeAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, dataset string) error {
-	zipWriter := gzip.NewWriter(file)
-	j := jsons.NewWriter(zipWriter)
-	for _, entity := range entities {
-		err := j.Add(entity)
-		if err != nil {
-			return err
-		}
-	}
-
-	// flush and close
-	return zipWriter.Close()
 }
 
 func (sf *Snowflake) getStage(fsId string, dataset string) string {
@@ -189,7 +163,7 @@ func (sf *Snowflake) Load(files []string, batchTimestamp int64, mapping *common_
 					_ = tx.Rollback()
 				}()
 
-				colNames, columns, colExtractions := sf.colMappings(mapping)
+				colNames, columns, colExtractions := api.ColMappings(mapping)
 				if _, err := tx.Exec(fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s.%s (
   		id varchar,
@@ -248,7 +222,7 @@ func (sf *Snowflake) LoadStage(stage string, batchTimestamp int64, mapping *comm
 				defer func() {
 					_ = tx.Rollback()
 				}()
-				colNames, columns, colExtractions := sf.colMappings(mapping)
+				colNames, columns, colExtractions := api.ColMappings(mapping)
 				smt := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
   		id varchar,

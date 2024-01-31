@@ -9,6 +9,7 @@ import (
 	"io"
 
 	common_datalayer "github.com/mimiro-io/common-datalayer"
+	"github.com/mimiro-io/datahub-snowflake-datalayer/internal/api"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 	gsf "github.com/snowflakedb/gosnowflake"
 )
@@ -27,7 +28,7 @@ func (sf *Snowflake) ReadAll(ctx context.Context, writer io.Writer, info dsInfo,
 			} else if mapping.OutgoingMappingConfig.MapAll {
 				columns = "*"
 			} else {
-				columns = cols(mapping.OutgoingMappingConfig)
+				columns = api.ColumnDDL(mapping.OutgoingMappingConfig)
 			}
 
 			// if a since is given, build a between where clause
@@ -209,15 +210,4 @@ func rowItem(line []any, types []*sql.ColumnType) common_datalayer.Item {
 	}
 
 	return rItem{line: line, cols: colNames}
-}
-
-func cols(config *common_datalayer.OutgoingMappingConfig) string {
-	res := ""
-	for _, mapping := range config.PropertyMappings {
-		if len(res) > 0 {
-			res = res + ", "
-		}
-		res = res + mapping.Property
-	}
-	return res
 }
