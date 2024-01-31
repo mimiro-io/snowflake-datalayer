@@ -27,11 +27,6 @@ type Dataset struct {
 	name              string
 }
 
-// Changes implements common.Dataset.
-func (ds *Dataset) Changes(since string, take int, latestOnly bool) (common.EntityIterator, common.LayerError) {
-	panic("changes not supported. use /datasets/{name}/entities to retrieve full datasets")
-}
-
 // MetaData implements common.Dataset.
 func (ds *Dataset) MetaData() map[string]any {
 	return ds.sourceConfig

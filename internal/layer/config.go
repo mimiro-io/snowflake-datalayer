@@ -52,8 +52,7 @@ func sysConfStr(conf *common.Config, key string) string {
 	return v
 }
 
-// TODO: this should be easier? e.g. pass a list of required and optional native params to the library
-// and have env reading and validation setup automatically
+// TODO: use BuildNativeEnvOverrides from common-datalayer
 func EnvOverrides(config *common.Config) error {
 	if v, ok := os.LookupEnv("MEMORY_HEADROOM"); ok {
 		config.NativeSystemConfig[MemoryHeadroom] = v
@@ -79,7 +78,6 @@ func EnvOverrides(config *common.Config) error {
 	return nil
 }
 
-// TODO: provide library function which takes a list of required native params?
 func validateConfig(conf *common.Config) error {
 	if conf.LayerServiceConfig == nil {
 		return fmt.Errorf("missing required layer_config block")

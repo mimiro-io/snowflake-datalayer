@@ -150,7 +150,8 @@ type entIter struct {
 
 // Close implements common_datalayer.EntityIterator.
 func (i *entIter) Close() common.LayerError {
-	panic("unimplemented")
+	i.release()
+	return nil
 }
 
 // Context implements common_datalayer.EntityIterator.
@@ -200,8 +201,6 @@ func (i *entIter) Next() (*egdm.Entity, common.LayerError) {
 
 // Token implements common_datalayer.EntityIterator.
 func (i *entIter) Token() (*egdm.Continuation, common.LayerError) {
-	// iter.Close() is currently not called, therefore calling release here
-	i.release()
 	c := egdm.NewContinuation()
 	c.Token = i.token
 	return c, nil
