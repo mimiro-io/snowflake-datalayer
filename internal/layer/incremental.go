@@ -43,6 +43,7 @@ type batchWriter struct {
 
 // Close implements common_datalayer.DatasetWriter.
 func (w *batchWriter) Close() common.LayerError {
+	defer w.release()
 	if w.read > 0 {
 		newFiles, err := w.dataset.db.putEntities(w.ctx, w.dataset.name, w.stage, w.entities)
 		if err != nil {
