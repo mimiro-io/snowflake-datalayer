@@ -2,6 +2,7 @@ package layer
 
 import (
 	"context"
+	"strings"
 
 	common "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
@@ -13,11 +14,15 @@ func (ds *Dataset) FullSync(ctx context.Context, batchInfo common.BatchInfo) (co
 		return nil, common.Err(err, common.LayerErrorInternal)
 	}
 
+	fsID := batchInfo.SyncId
+	if fsID != "" {
+		fsID = strings.ReplaceAll(fsID, "-", "_")
+	}
 	var stage string
 	if batchInfo.IsStartBatch {
 		// mkStage
 		var err2 error
-		stage, err2 = ds.db.mkStage(ctx, batchInfo.SyncId, ds.name, ds.datasetDefinition)
+		stage, err2 = ds.db.mkStage(ctx, fsID, ds.name, ds.datasetDefinition)
 		if err2 != nil {
 			ds.logger.Error("Failed to create stage", "error", err2, "stage", stage)
 			return nil, common.Err(err2, common.LayerErrorInternal)
@@ -25,7 +30,7 @@ func (ds *Dataset) FullSync(ctx context.Context, batchInfo common.BatchInfo) (co
 		ds.logger.Info("Created stage", "stage", stage)
 	} else {
 		// getStage
-		stage = ds.db.getFsStage(batchInfo.SyncId, ds.datasetDefinition)
+		stage = ds.db.getFsStage(fsID, ds.datasetDefinition)
 	}
 
 	// TODO: make configurable in navtive system config?
@@ -40,7 +45,7 @@ func (ds *Dataset) FullSync(ctx context.Context, batchInfo common.BatchInfo) (co
 	}
 	return writer, nil
 
-	// now let libraty call Write() on writer for each entity and emit batches
+	// now let library call Write() on writer for each entity and emit batches
 }
 
 type datasetWriter struct {
