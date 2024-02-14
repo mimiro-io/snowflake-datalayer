@@ -141,7 +141,7 @@ func (sf *SfDB) mkStage(ctx context.Context, syncID string, datasetName string, 
 	sf.logger.Debug(q)
 	_, err := conn.ExecContext(ctx, q)
 	if err != nil {
-		sf.logger.Warn("Failed to create/ensure stage")
+		sf.logger.Warn("Failed to create/ensure stage", "query", q)
 		return "", err
 	}
 	return stage, err
