@@ -44,16 +44,19 @@ func (ds *Dataset) dbCtx(ctx context.Context) (context.Context, func(), error) {
 	ctx = context.WithValue(ctx, Recorded, time.Now().UnixNano())
 	conn, err := ds.db.newConnection(ctx)
 	if err != nil {
+		defer cancel()
 		return nil, nil, err
 	}
 
 	_, err = conn.ExecContext(ctx, "ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';")
 	if err != nil {
+		defer cancel()
 		return nil, nil, err
 	}
 	// activate secondary roles
 	_, err = conn.ExecContext(ctx, "USE SECONDARY ROLES ALL;")
 	if err != nil {
+		defer cancel()
 		return nil, nil, err
 	}
 
@@ -61,8 +64,12 @@ func (ds *Dataset) dbCtx(ctx context.Context) (context.Context, func(), error) {
 	return ctx, func() {
 		if ctx.Value(Connection) != nil {
 			cancel()
-			conn := ctx.Value(Connection).(*sql.Conn)
-			conn.Close()
+			ctxConn := ctx.Value(Connection).(*sql.Conn)
+			err2 := ctxConn.Close()
+			if err2 != nil {
+				ds.logger.Error("Failed to close connection", "error", err2)
+				return
+			}
 		} else {
 			ds.logger.Error("No connection to close")
 		}
