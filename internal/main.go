@@ -68,8 +68,8 @@ func (dl *SnowflakeDataLayer) DatasetDescriptions() []*common.DatasetDescription
 }
 
 // Stop implements common_datalayer.DataLayerService.
-func (*SnowflakeDataLayer) Stop(ctx context.Context) error {
-	return nil
+func (dl *SnowflakeDataLayer) Stop(ctx context.Context) error {
+	return dl.db.close()
 }
 
 func NewSnowflakeDataLayer(conf *common.Config, logger common.Logger, metrics common.Metrics) (common.DataLayerService, error) {

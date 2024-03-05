@@ -13,7 +13,6 @@ func (ds *Dataset) Incremental(ctx context.Context) (common.DatasetWriter, commo
 	if err != nil {
 		return nil, common.Err(err, common.LayerErrorInternal)
 	}
-
 	stage, err2 := ds.db.mkStage(ctx, "", ds.name, ds.datasetDefinition)
 	if err2 != nil {
 		return nil, common.Err(err2, common.LayerErrorInternal)

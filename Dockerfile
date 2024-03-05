@@ -29,13 +29,11 @@ COPY testdata testdata
 
 # Build the app binaries
 RUN go vet ./... && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o flake cmd/flake/main.go && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snowflake-datalayer cmd/snowflake-datalayer/main.go && \
     go test -v ./...
 
 # enable the apps to run as any non root user
-RUN chgrp 0 flake && chmod g+X flake && \
-    chgrp 0 snowflake-datalayer && chmod g+X snowflake-datalayer
+RUN chgrp 0 snowflake-datalayer && chmod g+X snowflake-datalayer
 
 FROM scratch
 
@@ -43,7 +41,6 @@ WORKDIR /root/
 
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/flake .
 COPY --from=builder /app/snowflake-datalayer .
 COPY --from=builder /etc/passwd /etc/passwd
 
@@ -52,15 +49,6 @@ ENV LOG_TYPE=json \
     LOG_LEVEL=info \
     SERVICE_NAME=datahub-snowflake-datalayer \
     PORT=8080 \
-    SNOWFLAKE_USER=<user> \
-    SNOWFLAKE_PASSWORD=<password> \
-    SNOWFLAKE_ACCOUNT=<account> \
-    SNOWFLAKE_DB=<db> \
-    SNOWFLAKE_SCHEMA=<schema> \
-    WELL_KNOWN=https://<auth.srv>/.well-known/jwks.json \
-    ISSUER=https://<auth.srv> \
-    AUDIENCE=https://<app.host> \
-    AUTHENTICATOR=jwt \
     HOME=/ \
     USER=5678
 
@@ -71,4 +59,4 @@ EXPOSE 8080
 USER 5678
 
 # default command to run the app. override command with snowflake-datalayer to use v2
-CMD ["./flake", "server"]
+CMD ["./snowflake-datalayer"]

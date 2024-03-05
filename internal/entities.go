@@ -14,7 +14,6 @@ func (ds *Dataset) Entities(from string, limit int) (common.EntityIterator, comm
 	if err != nil {
 		return nil, common.Err(err, common.LayerErrorInternal)
 	}
-
 	q, err := ds.db.createQuery(ctx, ds.datasetDefinition)
 	if err != nil {
 		return nil, common.Err(err, common.LayerErrorInternal)

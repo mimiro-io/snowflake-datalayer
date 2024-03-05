@@ -1,4 +1,4 @@
-package api
+package layer
 
 import (
 	"fmt"
@@ -50,6 +50,9 @@ func ColMappings(mapping *common.DatasetDefinition) (string, string, string) {
 
 func ColumnDDL(config *common.OutgoingMappingConfig) string {
 	res := ""
+	if config == nil || config.PropertyMappings == nil {
+		return "*"
+	}
 	for _, mapping := range config.PropertyMappings {
 		if len(res) > 0 {
 			res = res + ", "

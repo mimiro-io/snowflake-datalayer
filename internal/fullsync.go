@@ -13,7 +13,6 @@ func (ds *Dataset) FullSync(ctx context.Context, batchInfo common.BatchInfo) (co
 	if err != nil {
 		return nil, common.Err(err, common.LayerErrorInternal)
 	}
-
 	fsID := batchInfo.SyncId
 	if fsID != "" {
 		fsID = strings.ReplaceAll(fsID, "-", "_")
