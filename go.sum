@@ -63,10 +63,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.28.2 h1:0YjXuWdYHvsm0HnT4vO8XpwG1D+i
 github.com/aws/aws-sdk-go-v2/service/sts v1.28.2/go.mod h1:jI+FWmYkSMn+4APWmZiZTgt0oM0TrvymD51FMqCnWgA=
 github.com/aws/smithy-go v1.20.1 h1:4SZlSlMr36UEqC7XOyRVb27XMeZubNcBNN+9IgEPIQw=
 github.com/aws/smithy-go v1.20.1/go.mod h1:krry+ya/rV9RDcV/Q16kpu6ypI4K2czasz0NC3qS14E=
-github.com/bfontaine/jsons v1.1.0 h1:idCo0mvUnPoCEVbDw8GQV+9f9ECmHMsIptEol8/Mh7E=
-github.com/bfontaine/jsons v1.1.0/go.mod h1:hDiEsAH7lTpxwsmIWA73SA4REWQ1zDS6TwHQcDmj1Fs=
-github.com/bfontaine/vanish/v2 v2.0.0 h1:D4my6lYZCXpkQTjqZIyQdD+aU4bvimDXiMgOIXmf2Po=
-github.com/bfontaine/vanish/v2 v2.0.0/go.mod h1:6sXdiwLYcae4+IgjKPk2vl+JMjwVO8pYt6Yubqp1brI=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/danieljoos/wincred v1.2.1 h1:dl9cBrupW8+r5250DYkYxocLeZ1Y4vB1kxgtjxw8GQs=
 github.com/danieljoos/wincred v1.2.1/go.mod h1:uGaFL9fDn3OLTvzCGulzE+SzjEe5NGlh5FdCcyfPwps=

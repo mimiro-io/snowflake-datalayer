@@ -16,10 +16,10 @@ package layer
 
 import (
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"os"
 
-	"github.com/bfontaine/jsons"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 )
 
@@ -34,7 +34,7 @@ func NewTmpFileWriter(dataset string) (*os.File, func(), error) {
 
 func WriteAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, _ string) error {
 	zipWriter := gzip.NewWriter(file)
-	j := jsons.NewWriter(zipWriter)
+	j := newWriter(zipWriter)
 	for _, entity := range entities {
 		err := j.Add(entity)
 		if err != nil {
@@ -44,4 +44,29 @@ func WriteAsGzippedNDJson(file io.Writer, entities []*egdm.Entity, _ string) err
 
 	// flush and close
 	return zipWriter.Close()
+}
+
+type Writer struct {
+	enc *json.Encoder
+}
+
+// NewWriter returns a new Writer, which writes JSON-encoded data
+// in the given io.Writer implementation.
+func newWriter(w io.Writer) Writer {
+	return Writer{enc: json.NewEncoder(w)}
+}
+
+// Add encodes the given value and write it as a JSON object.
+func (jw Writer) Add(v interface{}) error {
+	return jw.enc.Encode(v)
+}
+
+// AddAll is equivalent to calling Add on each of its arguments
+func (jw Writer) AddAll(args ...interface{}) (err error) {
+	for _, v := range args {
+		if err = jw.Add(v); err != nil {
+			return
+		}
+	}
+	return
 }
