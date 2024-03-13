@@ -29,7 +29,7 @@ COPY testdata testdata
 
 # Build the app binaries
 RUN go vet ./... && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o snowflake-datalayer cmd/snowflake-datalayer/main.go && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o snowflake-datalayer cmd/snowflake-datalayer/main.go && \
     go test -v ./...
 
 # enable the apps to run as any non root user
@@ -47,7 +47,7 @@ COPY --from=builder /etc/passwd /etc/passwd
 # server configs
 ENV LOG_TYPE=json \
     LOG_LEVEL=info \
-    SERVICE_NAME=datahub-snowflake-datalayer \
+    SERVICE_NAME=snowflake-datalayer \
     PORT=8080 \
     HOME=/ \
     USER=5678

@@ -96,7 +96,7 @@ To configure a dataset for writing, add a dataset definition to the configuratio
 Note that `source_config` is optional. If not provided here, the layer uses the dataset name as table,
 and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWFLAKE_SCHEMA`.
 
-```json
+```javascript
 {
     "name": "name of the dataset (uri path)",
     "source_config": {
@@ -147,7 +147,7 @@ additional sql transformation. Possible use cases include unpacking of array val
 The layer can be configured to read from tables that do not follow the convention based reading.
 To do so, create a dataset configuration for layer. The configuration is a json object with the following fields:
 
-```json
+```javascript
 {
     "dataset_definitions": [
         {

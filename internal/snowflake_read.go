@@ -242,7 +242,7 @@ func (r rItem) GetPropertyNames() []string {
 }
 
 func (r rItem) SetValue(name string, value any) { panic("implement me") }
-func (r rItem) NativeItem() any                 { panic("implement me") }
+func (r rItem) NativeItem() any                 { return r.line }
 
 func rowItem(line []any, types []*sql.ColumnType) common.Item {
 	colNames := make([]string, len(types))
