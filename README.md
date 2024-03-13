@@ -106,21 +106,19 @@ and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWF
     },
     "incoming_mapping_config": {
         "base_uri": "http://example.com",
-        "property_mappings": [
-            {
-                "Custom": {
-                    "expression": "expression to extract the value from the entity"
-                }, // optional, if set, the layer will use this expression to extract the value from the entity
-                "required": true,
-                "entity_property": "property name in the entity",
-                "property": "name of the column in the table",
-                "datatype": "integer", // snowflake datatype, must be compatible with the value
-                "is_reference": false, // if true, the value is looked up in the references part of the entity
-                "is_identity": false,
-                "is_deleted": false,
-                "is_recorded": false
-            }
-        ]
+        "property_mappings": [{
+            "Custom": {
+                "expression": "expression to extract the value from the entity"
+            }, // optional, if set, the layer will use this expression to extract the value from the entity
+            "required": true,
+            "entity_property": "property name in the entity",
+            "property": "name of the column in the table",
+            "datatype": "integer", // snowflake datatype, must be compatible with the value
+            "is_reference": false, // if true, the value is looked up in the references part of the entity
+            "is_identity": false,
+            "is_deleted": false,
+            "is_recorded": false
+        }]
     }
 }
 ```
@@ -149,40 +147,32 @@ To do so, create a dataset configuration for layer. The configuration is a json 
 
 ```javascript
 {
-    "dataset_definitions": [
-        {
-            "name": "name of the dataset (uri path)",
-            "source_config": {
-                "table_name": "name of the table in snowflake",
-                "schema": "name of the schema in snowflake",
-                "database": "name of the database in snowflake",
-                "raw_column": "optional name of the column containing a raw json entity"
-            },
-            "outgoing_mapping_config": {
-                // optional, not used when a raw_column is configured
-                "base_uri": "http://example.com",
-                "constructions": [
-                    {
-                        "property": "name",
-                        "operation": "replace",
-                        "args": ["arg1", "arg2", "arg3"]
-                    }
-                ],
-                "property_mappings": [
-                    {
-                        "required": true,
-                        "entity_property": "property name in the entity",
-                        "property": "name of the column in the table",
-                        "datatype": "int", // conversion hint for the layer
-                        "is_reference": false, // if true, the value is treated as a reference to another entity
-                        "uri_value_pattern": "http://example.com/{value}", // optional, if set, the value used as string template to construct a property value
-                        "is_identity": false,
-                        "default_value": "default"
-                    }
-                ],
-                "map_all": true
-            }
+    "dataset_definitions": [{
+        "name": "name of the dataset (uri path)",
+        "source_config": {
+            "table_name": "name of the table in snowflake",
+            "schema": "name of the schema in snowflake",
+            "database": "name of the database in snowflake",
+            "raw_column": "optional name of the column containing a raw json entity"
+        },
+        "outgoing_mapping_config": { // optional, not used when a raw_column is configured
+            "base_uri": "http://example.com",
+            "constructions": [{
+                    "property": "name",
+                    "operation": "replace",
+                    "args": ["arg1", "arg2", "arg3"]
+            }], "property_mappings": [{
+                    "required": true,
+                    "entity_property": "property name in the entity",
+                    "property": "name of the column in the table",
+                    "datatype": "int", // conversion hint for the layer
+                    "is_reference": false, // if true, the value is treated as a reference to another entity
+                    "uri_value_pattern": "http://example.com/{value}", // optional, if set, the value used as string template to construct a property value
+                    "is_identity": false,
+                    "default_value": "default"
+            }],
+            "map_all": true
         }
-    ]
+    }]
 }
 ```
