@@ -5,51 +5,42 @@
 ## Usage
 
 Running as from source:
+
 ```shell
-go run ./cmd/flake
+go run ./cmd/snowflake-layer
 ```
 
-Note that the server in default mode expects to be configured for jwt auth.
-Provide the following env vars to configure it:
-```shell
-WELL_KNOWN=https://<authservice>/jwks/.well-known/jwks.json
-ISSUER=https://<issuer>
-AUDIENCE=https://<audience>
+The layer can be configured with a [common-datalayer configuration](https://github.com/mimiro-io/common-datalayer?tab=readme-ov-file#data-layer-configuration)
+file. Example for the `layer_config` section:
+
+```json
+  "layer_config": {
+    "service_name": "snowflake",
+    "port": "8080",
+    "config_refresh_interval": "600s",
+    "log_level": "trace",
+    "log_format": "json"
+  },
 ```
 
-You can run it without auth by setting the `AUTHENTICATOR=noop` env var.
+Additionally, the layer allows the following environment variables to override
+system settings:
 
-The app will run on port 8080 by default. You can change this by setting the `PORT` env var.
+```shell
+MEMORY_HEADROOM=100 # reject new requests when the layer has less that this many MB free memory
+SNOWFLAKE_PRIVATE_KEY=base64 encoded private key
+SNOWFLAKE_USER=snowflake user
+SNOWFLAKE_ACCOUNT=snowflake account
+SNOWFLAKE_DB=snowflake database
+SNOWFLAKE_SCHEMA=snowflake schema
+SNOWFLAKE_WAREHOUSE=snowflake warehouse
+```
 
 ## Connecting to Snowflake
 
-To connect to snowflake, prepare a snowflake user for the layer. Then, follow the instructions in the [snowflake docs](https://docs.snowflake.com/en/user-guide/key-pair-auth.html) to generate a keypair for the user.
-The following is the process summarized:
-
-### Generating compatible keypairs
-
-Generate your private key:
-
-```shell
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -pkeyopt rsa_keygen_pubexp:65537 | openssl pkcs8 -topk8 -nocrypt -outform der > rsa-2048-private-key.p8
-```
-
-Generate the public key:
-```shell
-openssl pkey -pubout -inform der -outform der -in rsa-2048-private-key.p8 -out rsa-2048-public-key.spki
-```
-
-Generate base64 url encoded strings from the key files:
-
-```shell
-openssl base64 -in rsa-2048-private-key.p8 -out rsa-2048-private-key.base64.p8
-openssl base64 -in rsa-2048-public-key.spki -out rsa-2048-public-key.base64.spki
-```
-
-You then need to update your user in Snowflake with the public key (not base64).
-```
-ALTER USER <DB username> SET RSA_PUBLIC_KEY='<paste pub key here>'
-```
+To connect to snowflake, prepare a snowflake user for the layer.
+Then, follow the instructions in the [snowflake docs](https://docs.snowflake.com/en/user-guide/key-pair-auth.html)
+to generate a key pair for the user.
 
 When running the server, you need to provide the private key as a base64 encoded string.
 It can be set in the env var `SNOWFLAKE_PRIVATE_KEY`.
@@ -75,12 +66,14 @@ a deleted state. use the `deleted` field to filter them out.
 
 If a target table contains valid UDA entities in json format, the layer can read from the table without any configuration.
 Prerequisites:
-- The table must contain a column named `ENTITY` which contains the entity.
-- Entities are fully expanded, i.e. no namespace prefixes are used.
-- Chronology is reflected by the table's natural order. The latest entity is the last row in the table.
+
+-   The table must contain a column named `ENTITY` which contains the entity.
+-   Entities are fully expanded, i.e. no namespace prefixes are used.
+-   Chronology is reflected by the table's natural order. The latest entity is the last row in the table.
 
 To use convention based reading, construct a dataset name in this form:
-```
+
+```sql
 <database>.<schema>.<table>
 ```
 
@@ -97,50 +90,36 @@ curl http://<layerhost>/datasets/<database>.<schema>.<table>/entities
 The layer uses the `dataset_definitions` part of the common-datalayer configuration to configure the datasets.
 For details on the configuration options, see the [documentation](https://github.com/mimiro-io/common-datalayer#data-layer-configuration).
 
-This configuration format can be read from a file or from an url. The layer will look
-for the env var `CONFIG_LOCATION`. It will also re-read the configuration file every minute
-to allow for dynamic configuration of datasets. The interval can be configured by setting whole
-second values in the env var `CONFIG_LOADER_INTERVAL`.
-
-In case a JWT secured URL is used, these configuration options to the layer can be used:
-```shell
-CONFIG_LOADER_CLIENT_ID
-CONFIG_LOADER_CLIENT_SECRET
-CONFIG_LOADER_AUDIENCE
-CONFIG_LOADER_GRANT_TYPE
-CONFIG_LOADER_AUTH_ENDPOINT
-```
-
 ### Writing to Snowflake
 
 To configure a dataset for writing, add a dataset definition to the configuration with the following fields:
 Note that `source_config` is optional. If not provided here, the layer uses the dataset name as table,
 and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWFLAKE_SCHEMA`.
 
-```json
+```javascript
 {
-  "name": "name of the dataset (uri path)",
-  "source_config": {
-    "table_name": "name of the table in snowflake",
-    "schema": "name of the schema in snowflake",
-    "database": "name of the database in snowflake"
-  },
-  "incoming_mapping_config": {
-    "base_uri": "http://example.com",
-    "property_mappings": [{
-        "Custom": {
-            "expression": "expression to extract the value from the entity"
-        }, // optional, if set, the layer will use this expression to extract the value from the entity
-        "required": true,
-        "entity_property": "property name in the entity",
-        "property": "name of the column in the table",
-        "datatype": "integer", // snowflake datatype, must be compatible with the value
-        "is_reference": false, // if true, the value is looked up in the references part of the entity
-        "is_identity": false,
-        "is_deleted": false,
-        "is_recorded": false
-    }]
-  }
+    "name": "name of the dataset (uri path)",
+    "source_config": {
+        "table_name": "name of the table in snowflake",
+        "schema": "name of the schema in snowflake",
+        "database": "name of the database in snowflake"
+    },
+    "incoming_mapping_config": {
+        "base_uri": "http://example.com",
+        "property_mappings": [{
+            "Custom": {
+                "expression": "expression to extract the value from the entity"
+            }, // optional, if set, the layer will use this expression to extract the value from the entity
+            "required": true,
+            "entity_property": "property name in the entity",
+            "property": "name of the column in the table",
+            "datatype": "integer", // snowflake datatype, must be compatible with the value
+            "is_reference": false, // if true, the value is looked up in the references part of the entity
+            "is_identity": false,
+            "is_deleted": false,
+            "is_recorded": false
+        }]
+    }
 }
 ```
 
@@ -161,44 +140,39 @@ If a mapping contains a custom expression, it will be applied instead of the def
 This can be used to insert static values into the table, or to wrap the json-path based entity access expressions with
 additional sql transformation. Possible use cases include unpacking of array values or nested entities.
 
-
 ### Reading from Snowflake
 
 The layer can be configured to read from tables that do not follow the convention based reading.
 To do so, create a dataset configuration for layer. The configuration is a json object with the following fields:
 
-```json
+```javascript
 {
-  "dataset_definitions": [
-    {
-      "name": "name of the dataset (uri path)",
-      "source_config": {
-        "table_name": "name of the table in snowflake",
-        "schema": "name of the schema in snowflake",
-        "database": "name of the database in snowflake",
-        "raw_column": "optional name of the column containing a raw json entity"
-      },
-      "outgoing_mapping_config": { // optional, not used when a raw_column is configured
-        "base_uri": "http://example.com",
-        "constructions": [{
-          "property": "name",
-          "operation": "replace",
-          "args": ["arg1", "arg2", "arg3"]
-        }],
-        "property_mappings": [{
-          "required": true,
-          "entity_property": "property name in the entity",
-          "property": "name of the column in the table",
-          "datatype": "int", // conversion hint for the layer
-          "is_reference": false, // if true, the value is treated as a reference to another entity
-          "uri_value_pattern": "http://example.com/{value}",// optional, if set, the value used as string template to construct a property value
-          "is_identity": false,
-          "default_value": "default"
-        }],
-        "map_all": true
-      }
-    }
-  ]
+    "dataset_definitions": [{
+        "name": "name of the dataset (uri path)",
+        "source_config": {
+            "table_name": "name of the table in snowflake",
+            "schema": "name of the schema in snowflake",
+            "database": "name of the database in snowflake",
+            "raw_column": "optional name of the column containing a raw json entity"
+        },
+        "outgoing_mapping_config": { // optional, not used when a raw_column is configured
+            "base_uri": "http://example.com",
+            "constructions": [{
+                    "property": "name",
+                    "operation": "replace",
+                    "args": ["arg1", "arg2", "arg3"]
+            }], "property_mappings": [{
+                    "required": true,
+                    "entity_property": "property name in the entity",
+                    "property": "name of the column in the table",
+                    "datatype": "int", // conversion hint for the layer
+                    "is_reference": false, // if true, the value is treated as a reference to another entity
+                    "uri_value_pattern": "http://example.com/{value}", // optional, if set, the value used as string template to construct a property value
+                    "is_identity": false,
+                    "default_value": "default"
+            }],
+            "map_all": true
+        }
+    }]
 }
 ```
-

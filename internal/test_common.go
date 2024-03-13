@@ -1,16 +1,29 @@
+// Copyright 2024 MIMIRO AS
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package layer
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	common "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
-	"github.com/onsi/ginkgo/v2"
-	"github.com/onsi/gomega"
 )
 
 // TODO: provide mocks in common-datalayer?
@@ -22,51 +35,85 @@ type (
 		logs []string
 	}
 	testDB struct {
-		db   *sql.DB
-		mock sqlmock.Sqlmock
+		db         *sql.DB
+		mock       sqlmock.Sqlmock
+		NewTmpFile func(ds string) (*os.File, func(), error)
+		sfDB       *SfDB
 	}
 	testQuery struct {
 		sinceColumn string
 		sinceToken  string
 		limit       int
+		sfQ         *sfQuery
 	}
 	testIter struct {
 		sinceColumn string
 		sinceToken  string
-		entIter
-		limit int
+		limit       int
+		sfIter      *entIter
 	}
 )
 
+func (tdb *testDB) close() error {
+	return tdb.db.Close()
+}
+
+func (t testIter) Context() *egdm.Context {
+	return t.sfIter.Context()
+}
+
+func (t testIter) Next() (*egdm.Entity, common.LayerError) {
+	return t.sfIter.Next()
+}
+
+func (t testIter) Token() (*egdm.Continuation, common.LayerError) {
+	return t.sfIter.Token()
+}
+
+func (t testIter) Close() common.LayerError {
+	return t.sfIter.Close()
+}
+
 // run implements query.
 func (q *testQuery) run(ctx context.Context, releaseConn func()) (common.EntityIterator, common.LayerError) {
+	it, err := q.sfQ.run(ctx, releaseConn)
+	if err != nil {
+		return nil, err
+	}
 	return &testIter{
 		limit:       q.limit,
 		sinceColumn: q.sinceColumn,
 		sinceToken:  q.sinceToken,
-	}, nil
+		sfIter:      it.(*entIter),
+	}, err
 }
 
 // withLimit implements query.
 func (q *testQuery) withLimit(limit int) (query, error) {
 	q.limit = limit
-	return q, nil
+	return q.sfQ.withLimit(limit)
 }
 
 // withSince implements query.
 func (q *testQuery) withSince(sinceColumn string, sinceToken string) (query, error) {
 	q.sinceColumn = sinceColumn
 	q.sinceToken = sinceToken
-	return q, nil
+	return q.sfQ.withSince(sinceColumn, sinceToken)
 }
 
-func newTestDB(cnt int) *testDB {
-	ginkgo.GinkgoHelper()
-	db, mock, err := sqlmock.NewWithDSN("M_DB:@host2:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
+func newTestDB(cnt int, conf *common.Config, logger common.Logger, metrics common.Metrics) (*testDB, error) {
+	dbNew, mock, err := sqlmock.NewWithDSN("M_DB:@host2:443?database=TESTDB&schema=TESTSCHEMA&rnd=" + fmt.Sprint(cnt))
+	if err != nil {
+		return nil, err
+	}
 	mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON';").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("USE SECONDARY ROLES ALL;").WillReturnResult(sqlmock.NewResult(1, 1))
-	gomega.Expect(err).NotTo(gomega.HaveOccurred())
-	return &testDB{db: db, mock: mock}
+	sfDB, err := newSfDB(conf, logger, metrics)
+	if err != nil {
+		return nil, err
+	}
+	sfDB.db = dbNew
+	return &testDB{db: dbNew, mock: mock, sfDB: sfDB}, err
 }
 
 func (tdb *testDB) ExpectConn() {
@@ -75,28 +122,31 @@ func (tdb *testDB) ExpectConn() {
 }
 
 // createQuery implements db.
-func (*testDB) createQuery(ctx context.Context, datasetDefinition *common.DatasetDefinition) (query, error) {
-	return &testQuery{}, nil
+func (tdb *testDB) createQuery(ctx context.Context, datasetDefinition *common.DatasetDefinition) (query, error) {
+	q, err := tdb.sfDB.createQuery(ctx, datasetDefinition)
+	return &testQuery{
+		sfQ: q.(*sfQuery),
+	}, err
 }
 
 // getFsStage implements db.
-func (*testDB) getFsStage(syncId string, datasetDefinition *common.DatasetDefinition) string {
-	panic("unimplemented")
+func (tdb *testDB) getFsStage(syncId string, datasetDefinition *common.DatasetDefinition) string {
+	return tdb.sfDB.getFsStage(syncId, datasetDefinition)
 }
 
 // loadFilesInStage implements db.
-func (*testDB) loadFilesInStage(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
-	panic("unimplemented")
+func (tdb *testDB) loadFilesInStage(ctx context.Context, files []string, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
+	return tdb.sfDB.loadFilesInStage(ctx, files, stage, loadTime, datasetDefinition)
 }
 
 // loadStage implements db.
-func (*testDB) loadStage(ctx context.Context, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
-	panic("unimplemented")
+func (tdb *testDB) loadStage(ctx context.Context, stage string, loadTime int64, datasetDefinition *common.DatasetDefinition) error {
+	return tdb.sfDB.loadStage(ctx, stage, loadTime, datasetDefinition)
 }
 
 // mkStage implements db.
-func (*testDB) mkStage(ctx context.Context, syncID string, datasetName string, datasetDefinition *common.DatasetDefinition) (string, error) {
-	panic("unimplemented")
+func (tdb *testDB) mkStage(ctx context.Context, syncID string, datasetName string, datasetDefinition *common.DatasetDefinition) (string, error) {
+	return tdb.sfDB.mkStage(ctx, syncID, datasetName, datasetDefinition)
 }
 
 // newConnection implements db.
@@ -105,8 +155,9 @@ func (tdb *testDB) newConnection(ctx context.Context) (*sql.Conn, error) {
 }
 
 // putEntities implements db.
-func (*testDB) putEntities(ctx context.Context, datasetName string, stage string, entities []*egdm.Entity) ([]string, error) {
-	panic("unimplemented")
+func (tdb *testDB) putEntities(ctx context.Context, datasetName string, stage string, entities []*egdm.Entity) ([]string, error) {
+	tdb.sfDB.NewTmpFile = tdb.NewTmpFile
+	return tdb.sfDB.putEntities(ctx, datasetName, stage, entities)
 }
 
 var _ db = &testDB{} // interface assertion
@@ -170,7 +221,8 @@ jmMHJqy7ow==`,
 		},
 		LayerServiceConfig: &common.LayerServiceConfig{
 			ServiceName: "test",
-			Port:        "5555",
+			Port:        "17866",
+			//LogFormat:   "text",
 		},
 		DatasetDefinitions: []*common.DatasetDefinition{},
 	}
