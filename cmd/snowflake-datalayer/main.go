@@ -18,7 +18,7 @@ import (
 	"os"
 
 	common "github.com/mimiro-io/common-datalayer"
-	layer "github.com/mimiro-io/datahub-snowflake-datalayer/internal"
+	layer "github.com/mimiro-io/snowflake-datalayer/internal"
 )
 
 func main() {

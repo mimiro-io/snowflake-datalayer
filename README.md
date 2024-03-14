@@ -1,6 +1,6 @@
 # Snowflake Datalayer for Mimiro DataHub
 
-[![CI](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml/badge.svg)](https://github.com/mimiro-io/datahub-snowflake-layer/actions/workflows/ci.yaml)
+[![CI](https://github.com/mimiro-io/snowflake-layer/actions/workflows/ci.yaml/badge.svg)](https://github.com/mimiro-io/snowflake-layer/actions/workflows/ci.yaml)
 
 ## Usage
 
