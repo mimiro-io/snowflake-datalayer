@@ -1,16 +1,17 @@
 name: CI
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
   release:
     types:
       - published
 jobs:
-  AWS:
-    uses: mimiro-io/github-actions/.github/workflows/docker.yaml@main
+  DockerHub:
+    uses: mimiro-io/.github/.github/workflows/dockerhub.yaml@main
     with:
-      skip_irsa: true
+      name: "mimiro/snowflake-datalayer"
     secrets:
-      ECR_REPO_POLICY: ${{ secrets.ECR_REPO_POLICY }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
