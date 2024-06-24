@@ -176,3 +176,31 @@ To do so, create a dataset configuration for layer. The configuration is a json 
     }]
 }
 ```
+
+**Example reading from snowflake and setting id and rdf type:**
+```javascript
+{
+    "outgoing_mapping_config": { 
+        "base_uri": "http://example.com",
+        "constructions": [{
+                "property": "rdf",
+                "operation": "literal",
+                "args": ["JournalSystem"]
+        }], "property_mappings": [{
+                "required": true,
+                "entity_property": "ID",
+                "property": "journalId",
+                "uri_value_pattern": "http://example.com/journal/{value}",
+                "is_identity": true,
+        },
+        {
+                "required": true,
+                "entity_property": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                "property": "rdf",
+                "is_reference": true,
+                "uri_value_pattern": "http://example.com/{value}"
+        }],
+        "map_all": true
+    }
+}
+```
