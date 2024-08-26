@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine as build_env
+FROM golang:1.22-alpine AS build_env
 
 # Install git + SSL ca certificates.
 # Git is required for fetching the dependencies.
@@ -20,7 +20,7 @@ COPY go.mod go.sum ./
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
-FROM build_env as builder
+FROM build_env AS builder
 
 # Copy the source from the current directory to the Working Directory inside the container
 COPY cmd cmd
