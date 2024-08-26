@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/mimiro-io/common-datalayer v0.2.2
+	github.com/mimiro-io/common-datalayer v0.2.6
 	github.com/mimiro-io/entity-graph-data-model v0.7.5
 	github.com/snowflakedb/gosnowflake v1.8.0
 )
