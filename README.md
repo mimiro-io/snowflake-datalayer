@@ -42,8 +42,8 @@ To connect to snowflake, prepare a snowflake user for the layer.
 Then, follow the instructions in the [snowflake docs](https://docs.snowflake.com/en/user-guide/key-pair-auth.html)
 to generate a key pair for the user.
 
-When running the server, you need to provide the private key as a base64 encoded string.
-It can be set in the env var `SNOWFLAKE_PRIVATE_KEY`.
+When you have generated an *unencrypted* private key, you need to strip the header and footer lines and remove all whitespaces from the key.
+Then it can provided to the service by setting the `SNOWFLAKE_PRIVATE_KEY` environment variable.
 
 ## Convention based usage with minimal configuration
 
