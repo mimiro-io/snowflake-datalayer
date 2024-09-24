@@ -20,6 +20,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	gsf "github.com/snowflakedb/gosnowflake"
 
@@ -95,7 +97,20 @@ func (q *sfQuery) withSince(sinceColumn, sinceToken string) (query, error) {
 	if res == nil {
 		res = string(sinceVal)
 	}
-	newSince = fmt.Sprintf("%v", res)
+
+	switch res.(type) {
+	case time.Time:
+		newSince = res.(time.Time).Format(time.RFC3339)
+	default:
+		newSince = fmt.Sprintf("%v", res)
+	}
+
+	if _, err := strconv.ParseInt(newSince, 10, 64); err == nil {
+		newSince = fmt.Sprintf("%v", newSince)
+	} else {
+		newSince = fmt.Sprintf("'%v'", newSince)
+	}
+
 	q.token = base64.URLEncoding.EncodeToString([]byte(newSince))
 
 	if sinceToken != "" {
