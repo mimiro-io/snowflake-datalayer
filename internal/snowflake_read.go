@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	gsf "github.com/snowflakedb/gosnowflake"
@@ -95,7 +96,7 @@ func (q *sfQuery) withSince(sinceColumn, sinceToken string) (query, error) {
 	row.Scan(&res)
 
 	if res == nil {
-		res = string(sinceVal)
+		res = strings.ReplaceAll(string(sinceVal), "'", "")
 	}
 
 	switch res.(type) {
