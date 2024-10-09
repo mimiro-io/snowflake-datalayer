@@ -328,6 +328,82 @@ func TestWebServer(t *testing.T) {
 				t.Fatalf("unexpected response body: %s", string(bodyBytes))
 			}
 		})
+		t.Run("should apply string since tokens in where clause", func(t *testing.T) {
+			setup()
+			t.Cleanup(cleanup)
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "cucumber",
+					SourceConfig: map[string]any{
+						TableName:   "baz",
+						Schema:      "bar",
+						Database:    "foo",
+						RawColumn:   "ENTITY",
+						SinceColumn: "ts",
+					},
+				},
+			}
+			testLayer.UpdateConfiguration(cfg)
+
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}).AddRow("2024-09-01T11:00:00+02:00"))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts <= '2024\\-09\\-01T11:00:00\\+02:00'").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}).
+					AddRow(`{"id": "3", "props": {}, "refs": {}}`),
+				)
+
+			resp, err := http.Get("http://localhost:17866/datasets/cucumber/changes")
+			if err != nil {
+				t.Fatalf("failed to get entities: %v", err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			// GinkgoLogr.Info(string(bodyBytes))
+			if string(bodyBytes) != `[
+{"id":"@context","namespaces":{}},
+{"id":"3","refs":{},"props":{}},
+{"id":"@continuation","token":"JzIwMjQtMDktMDFUMTE6MDA6MDArMDI6MDAn"}]
+` {
+				t.Fatalf("unexpected response body: %s", string(bodyBytes))
+			}
+
+			tDB.(*testDB).ExpectConn()
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}).AddRow("2024-09-01T11:00:01+02:00"))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts > '2024\\-09\\-01T11:00:00\\+02:00' " +
+				"and ts <= '2024\\-09\\-01T11:00:01\\+02:00'").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}).
+					AddRow(`{"id": "3", "props": {}, "refs": {}}`),
+				)
+			resp, err = http.Get("http://localhost:17866/datasets/cucumber/changes?since=JzIwMjQtMDktMDFUMTE6MDA6MDArMDI6MDAn")
+			if err != nil {
+				t.Fatalf("failed to get entities: %v", err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			bodyBytes, err = io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			// GinkgoLogr.Info(string(bodyBytes))
+			if string(bodyBytes) != `[
+{"id":"@context","namespaces":{}},
+{"id":"3","refs":{},"props":{}},
+{"id":"@continuation","token":"JzIwMjQtMDktMDFUMTE6MDA6MDErMDI6MDAn"}]
+` {
+				t.Fatalf("unexpected response body: %s", string(bodyBytes))
+			}
+		})
 		t.Run("should apply since tokens in where clause and return it again when nothing found", func(t *testing.T) {
 			setup()
 			t.Cleanup(cleanup)
@@ -368,6 +444,51 @@ func TestWebServer(t *testing.T) {
 			if string(bodyBytes) != `[
 {"id":"@context","namespaces":{}},
 {"id":"@continuation","token":"MTY1NTY1NjU1NTY3"}]
+` {
+				t.Fatalf("unexpected response body: %s", string(bodyBytes))
+			}
+		})
+
+		t.Run("should apply string since tokens in where clause and return it again when nothing found", func(t *testing.T) {
+			setup()
+			t.Cleanup(cleanup)
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{
+				{
+					DatasetName: "cucumber",
+					SourceConfig: map[string]any{
+						TableName:   "baz",
+						Schema:      "bar",
+						Database:    "foo",
+						RawColumn:   "ENTITY",
+						SinceColumn: "ts",
+					},
+				},
+			}
+			testLayer.UpdateConfiguration(cfg)
+
+			mock.ExpectQuery("SELECT MAX\\(ts\\) FROM foo.bar.baz").
+				WillReturnRows(sqlmock.NewRows([]string{"MAX"}))
+
+			mock.ExpectQuery("SELECT ENTITY FROM foo.bar.baz WHERE ts > '2024\\-09\\-01T11:00:00\\+02:00' " +
+				"and ts <= '2024\\-09\\-01T11:00:00\\+02:00'").
+				WillReturnRows(sqlmock.
+					NewRows([]string{"ENTITY"}),
+				)
+			resp, err := http.Get("http://localhost:17866/datasets/cucumber/changes?since=JzIwMjQtMDktMDFUMTE6MDA6MDArMDI6MDAn")
+			if err != nil {
+				t.Fatalf("failed to get entities: %v", err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			// GinkgoLogr.Info(string(bodyBytes))
+			if string(bodyBytes) != `[
+{"id":"@context","namespaces":{}},
+{"id":"@continuation","token":"JzIwMjQtMDktMDFUMTE6MDA6MDArMDI6MDAn"}]
 ` {
 				t.Fatalf("unexpected response body: %s", string(bodyBytes))
 			}
