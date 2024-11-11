@@ -96,6 +96,11 @@ To configure a dataset for writing, add a dataset definition to the configuratio
 Note that `source_config` is optional. If not provided here, the layer uses the dataset name as table,
 and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWFLAKE_SCHEMA`.
 
+As default, the layer will create a table with the name of the dataset, and *append* all entities to it.
+If a layer is configured with a `latest_table` flag set to true, the layer will additionally create a table with the
+name of the dataset and the suffix `_latest`. The layer will maintain the latest version of each entity in this table, using
+upserts. Note that the layer never deletes, deleted entities are marked by the deleted flag.
+
 ```javascript
 {
     "name": "name of the dataset (uri path)",
@@ -103,6 +108,7 @@ and database and schema from the environment variables `SNOWFLAKE_DB` and `SNOWF
         "table_name": "name of the table in snowflake",
         "schema": "name of the schema in snowflake",
         "database": "name of the database in snowflake"
+        "latest_table": false
     },
     "incoming_mapping_config": {
         "base_uri": "http://example.com",
