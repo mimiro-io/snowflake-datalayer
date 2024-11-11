@@ -43,6 +43,7 @@ const (
 	Database    = "database"
 	RawColumn   = "raw_column"
 	SinceColumn = "since_column"
+	LatestTable = "latest_table"
 
 	// native system config
 	MemoryHeadroom      = "memory_headroom"

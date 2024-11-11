@@ -41,7 +41,7 @@ func TestWebServer(t *testing.T) {
 	cnt := 0
 	setup := func() {
 		cnt++
-		//fmt.Printf("setup: %v\n", cnt)
+		// fmt.Printf("setup: %v\n", cnt)
 		cfg, _, _ = testDeps()
 		cfg.LayerServiceConfig.LogLevel = "error"
 
@@ -78,7 +78,6 @@ func TestWebServer(t *testing.T) {
 				return nil, err
 			}
 			return l, nil
-
 		})
 		server.WithConfigLocation(tmpDir)
 		err := server.Start()
@@ -100,7 +99,7 @@ func TestWebServer(t *testing.T) {
 		}
 	}
 	cleanup := func() {
-		//fmt.Printf("cleaning up: %v\n", cnt)
+		// fmt.Printf("cleaning up: %v\n", cnt)
 		err := mock.ExpectationsWereMet()
 		if err != nil {
 			t.Fatalf("there were unfulfilled expectations: %s", err)
@@ -144,7 +143,7 @@ func TestWebServer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to read response body: %v", err)
 			}
-			//t.Log(string(bodyBytes))
+			// t.Log(string(bodyBytes))
 			expected := `[
 {"id":"@context","namespaces":{}},
 {"id":"1","refs":{},"props":{"foo":"bar"}},
@@ -778,7 +777,7 @@ func TestWebServer(t *testing.T) {
 				" deleted boolean, dataset varchar, entity variant \\);").WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery("COPY INTO TESTDB.TESTSCHEMA.POTATOE\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
 				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'testdb.testschema.potatoe'::varchar, " +
-				"\\$1::variant FROM @TESTDB.TESTSCHEMA.S_POTATOE" +
+				"\\$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE" +
 				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
 			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
 			mock.ExpectCommit()
@@ -816,7 +815,6 @@ func TestWebServer(t *testing.T) {
 ` {
 				t.Fatalf("unexpected gzip file: %s", string(bytes))
 			}
-
 		})
 		t.Run("PUT gzipped mapped files in a stage and load specified files", func(t *testing.T) {
 			setup()
@@ -882,10 +880,10 @@ func TestWebServer(t *testing.T) {
 				" deleted boolean, dataset varchar, foo varchar, ok boolean, num integer, baz varchar \\);").WillReturnResult(sqlmock.NewResult(1, 1))
 			mock.ExpectQuery("COPY INTO SFDB2.SFS2.POTATOE\\(id, recorded, deleted, dataset, foo, ok, num, baz\\) FROM \\( " +
 				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoes'::varchar, " +
-				"\\$1:props:\"foo\"::varchar, " +
-				"\\$1:props:\"ok\"::boolean, " +
-				"\\$1:props:\"num\"::integer, " +
-				"\\$1:refs:\"baz\"::varchar " +
+				"\\$1:props:\"foo\"::varchar as foo, " +
+				"\\$1:props:\"ok\"::boolean as ok, " +
+				"\\$1:props:\"num\"::integer as num, " +
+				"\\$1:refs:\"baz\"::varchar as baz " +
 				"FROM @SFDB2.SFS2.S_POTATOE\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
 			).
 				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
@@ -927,6 +925,429 @@ func TestWebServer(t *testing.T) {
 
 			if string(bytes) != expected {
 				t.Fatalf("unexpected gzip file: \n\n%s. wanted \n\n%s", string(bytes), expected)
+			}
+		})
+		t.Run("PUT entity files in a stage and load specified files into LATEST_ACTIVE", func(t *testing.T) {
+			setup()
+			t.Cleanup(cleanup)
+			f, err := os.CreateTemp("", "zip")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			testLayer.db.(*testDB).NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
+			}
+			defer os.Remove(f.Name())
+
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{{
+				DatasetName: "potatoe",
+				SourceConfig: map[string]any{
+					TableName:   "potatoe",
+					Schema:      "TESTSCHEMA",
+					Database:    "TESTDB",
+					LatestTable: true,
+				},
+			}}
+			testLayer.UpdateConfiguration(cfg)
+			// not checking for actual sql, this is regex and it does like all syntax as is
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE`).WillReturnResult(sqlmock.NewResult(1, 1))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectBegin()
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.POTATOE \\( id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant \\);").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.POTATOE_LATEST \\( id varchar, " +
+				"recorded integer, deleted boolean, dataset varchar, entity variant \\)").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery("COPY INTO TESTDB.TESTSCHEMA.POTATOE\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoe'::varchar, " +
+				"\\$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE" +
+				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectQuery("MERGE INTO TESTDB.TESTSCHEMA.POTATOE_LATEST AS latest " +
+				"USING \\( SELECT \\$1:id::varchar as id, " +
+				"\\d+::integer as recorded, " +
+				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
+				"'potatoe'::varchar as dataset, " +
+				"\\$1::variant as entity " +
+				"FROM @TESTDB.TESTSCHEMA.S_POTATOE \\(PATTERN \\=\\> '.*\\(zip.*\\)'\\) \\) AS src " +
+				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
+				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
+				"latest.entity = src.entity " +
+				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, entity\\) " +
+				"VALUES \\(src.id, src.recorded, src.deleted, src.dataset, src.entity\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+			mock.ExpectCommit()
+
+			res, err := http.Post("http://localhost:17866/datasets/potatoe/entities", "application/json",
+				strings.NewReader(`[{"id": "@context", "namespaces": {
+"x": "http://snowflake/foo/",
+"y": "http://snowflake/bar/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "x:1", "recorded": 1456456456, "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "recorded": 1456456457, "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
+`))
+			if err != nil {
+				t.Fatalf("failed to post entities: %v", err)
+			}
+			if res.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", res.StatusCode)
+			}
+			f2, err := os.Open(f.Name())
+			if err != nil {
+				t.Fatalf("failed to open temp file: %v", err)
+			}
+			r, err := gzip.NewReader(f2)
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read gzip file: %v", err)
+			}
+			// println(string(bytes))
+			if string(bytes) != `{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
+{"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+` {
+				t.Fatalf("unexpected gzip file: %s", string(bytes))
+			}
+		})
+		t.Run("PUT mapped files in a stage and load specified files into LATEST_ACTIVE", func(t *testing.T) {
+			setup()
+			t.Cleanup(cleanup)
+			f, err := os.CreateTemp("", "zip")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			testLayer.db.(*testDB).NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
+			}
+			defer os.Remove(f.Name())
+
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{{
+				DatasetName: "potatoes",
+				SourceConfig: map[string]any{
+					TableName:   "potatoe",
+					Schema:      "SFS2",
+					Database:    "SFDB2",
+					LatestTable: true,
+				},
+				IncomingMappingConfig: &common_datalayer.IncomingMappingConfig{
+					MapNamed: false,
+					PropertyMappings: []*common_datalayer.EntityToItemPropertyMapping{{
+						EntityProperty: "foo",
+						Property:       "foo",
+						Datatype:       "varchar",
+					}, {
+						EntityProperty: "ok",
+						Property:       "ok",
+						Datatype:       "boolean",
+					}, {
+						EntityProperty: "num",
+						Property:       "num",
+						Datatype:       "integer",
+					}, {
+						EntityProperty: "baz",
+						Property:       "baz",
+						Datatype:       "varchar",
+						IsReference:    true,
+					}},
+					BaseURI: "http://potatoe/test/",
+				},
+			}}
+			testLayer.UpdateConfiguration(cfg)
+
+			// not checking for actual sql, this is regex and it does like all syntax as is
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS SFDB2.SFS2.S_POTATOE copy`).
+				WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectBegin()
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB2.SFS2.POTATOE \\( id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, foo varchar, ok boolean, num integer, baz varchar \\);").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS SFDB2.SFS2.POTATOE_LATEST \\( " +
+				"id varchar, recorded integer, deleted boolean, dataset varchar, foo varchar, ok boolean, num integer, baz varchar \\);",
+			).WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery("COPY INTO SFDB2.SFS2.POTATOE\\(id, recorded, deleted, dataset, foo, ok, num, baz\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoes'::varchar, " +
+				"\\$1:props:\"foo\"::varchar as foo, " +
+				"\\$1:props:\"ok\"::boolean as ok, " +
+				"\\$1:props:\"num\"::integer as num, " +
+				"\\$1:refs:\"baz\"::varchar as baz " +
+				"FROM @SFDB2.SFS2.S_POTATOE\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\) FILES = \\('zip.*'\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectQuery("MERGE INTO SFDB2.SFS2.POTATOE_LATEST AS latest USING \\( SELECT " +
+				"\\$1:id::varchar as id, \\d+::integer as recorded, coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
+				"'potatoes'::varchar as dataset, \\$1:props:\"foo\"::varchar as foo, \\$1:props:\"ok\"::boolean as ok, " +
+				"\\$1:props:\"num\"::integer as num, \\$1:refs:\"baz\"::varchar as baz " +
+				"FROM @SFDB2.SFS2.S_POTATOE \\(PATTERN => '.*\\(zip.*\\)'\\) \\) AS src " +
+				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET latest.recorded = src.recorded, " +
+				"latest.deleted = src.deleted, latest.dataset = src.dataset, latest.entity = src.entity " +
+				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, foo, ok, num, baz\\) VALUES \\(" +
+				"src.id, src.recorded, src.deleted, src.dataset, src.entity\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectCommit()
+
+			res, err := http.Post("http://localhost:17866/datasets/potatoes/entities", "application/json",
+				strings.NewReader(`[{"id": "@context", "namespaces": {
+"x": "http://snowflake/foo/",
+"y": "http://snowflake/bar/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "x:1", "props": {"x:foo": "bar", "x:ok": true, "x:num": 12}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}},
+{"id": "x:3", "deleted": true, "recorded": 126456789123, "props": {"x:foo": "bar3", "x:ok": true, "x:num": 12},"refs": {"x:baz": "y:hello"}}]
+`))
+			if err != nil {
+				t.Fatalf("failed to post entities: %v", err)
+			}
+			if res.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", res.StatusCode)
+			}
+			f2, err := os.Open(f.Name())
+			if err != nil {
+				t.Fatalf("failed to open temp file: %v", err)
+			}
+			r, err := gzip.NewReader(f2)
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read gzip file: %v", err)
+			}
+			println(string(bytes))
+			expected := `{"id":"http://snowflake/foo/1","refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar","http://snowflake/foo/num":12,"http://snowflake/foo/ok":true}}
+{"id":"http://snowflake/foo/2","refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+{"id":"http://snowflake/foo/3","recorded":126456789123,"deleted":true,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar3","http://snowflake/foo/num":12,"http://snowflake/foo/ok":true}}
+`
+
+			if string(bytes) != expected {
+				t.Fatalf("unexpected gzip file: \n\n%s. wanted \n\n%s", string(bytes), expected)
+			}
+		})
+		t.Run("fullsync without LATEST_ACTIVE", func(t *testing.T) {
+			setup()
+			t.Cleanup(cleanup)
+			f, err := os.CreateTemp("", "zip")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			testLayer.db.(*testDB).NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
+			}
+			defer os.Remove(f.Name())
+
+			mock.ExpectQuery("SHOW STAGES LIKE '%POTATOE_FSID_%' IN TESTDB.TESTSCHEMA;select .* FROM table\\(RESULT_SCAN\\(LAST_QUERY_ID\\(\\)\\)\\)").
+				WillReturnRows(sqlmock.NewRows([]string{}))
+			// not checking for actual sql, this is regex and it does like all syntax as is
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234`).WillReturnResult(sqlmock.NewResult(1, 1))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectBegin()
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 \\(id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant\\);").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			//COPY INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234(id, recorded, deleted, dataset, entity) FROM (
+			//SELECT $1:id::varchar, 1731008161359419314::integer, coalesce($1:deleted::boolean, false), 'testdb.testschema.potatoe'::varchar,
+			//$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234
+			//) FILE_FORMAT = (TYPE='json' COMPRESSION=GZIP);
+
+			mock.ExpectQuery("COPY INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'testdb.testschema.potatoe'::varchar, " +
+				"\\$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234" +
+				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectExec("ALTER STAGE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_DONE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 SWAP WITH POTATOE").WillReturnError(fmt.Errorf("error"))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO POTATOE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			postBody := strings.NewReader(`[{"id": "@context", "namespaces": {
+"x": "http://snowflake/foo/",
+"y": "http://snowflake/bar/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "x:1", "recorded": 1456456456, "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "recorded": 1456456457, "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
+`)
+			req, err := http.NewRequest("POST", "http://localhost:17866/datasets/potatoe/entities", postBody)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("universal-data-api-full-sync-start", "true")
+			req.Header.Set("universal-data-api-full-sync-end", "true")
+			req.Header.Set("universal-data-api-full-sync-id", "1234")
+
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("failed to post entities: %v", err)
+			}
+			if res.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", res.StatusCode)
+			}
+			f2, err := os.Open(f.Name())
+			if err != nil {
+				t.Fatalf("failed to open temp file: %v", err)
+			}
+			r, err := gzip.NewReader(f2)
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read gzip file: %v", err)
+			}
+			// println(string(bytes))
+			if string(bytes) != `{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
+{"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+` {
+				t.Fatalf("unexpected gzip file: %s", string(bytes))
+			}
+		})
+		t.Run("fullsync with LATEST_ACTIVE", func(t *testing.T) {
+
+			setup()
+			t.Cleanup(cleanup)
+			f, err := os.CreateTemp("", "zip")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			testLayer.db.(*testDB).NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
+			}
+			defer os.Remove(f.Name())
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{{
+				DatasetName: "potatoe",
+				SourceConfig: map[string]any{
+					TableName:   "potatoe",
+					Schema:      "TESTSCHEMA",
+					Database:    "TESTDB",
+					LatestTable: true,
+				},
+			}}
+			testLayer.UpdateConfiguration(cfg)
+			mock.ExpectQuery("SHOW STAGES LIKE '%POTATOE_FSID_%' IN TESTDB.TESTSCHEMA;select .* FROM table\\(RESULT_SCAN\\(LAST_QUERY_ID\\(\\)\\)\\)").
+				WillReturnRows(sqlmock.NewRows([]string{}))
+			// not checking for actual sql, this is regex and it does like all syntax as is
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234`).WillReturnResult(sqlmock.NewResult(1, 1))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectBegin()
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 \\(id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant\\);").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST \\(id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant\\);").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery("COPY INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoe'::varchar, " +
+				"\\$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234" +
+				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectQuery("MERGE INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST AS latest " +
+				"USING \\( SELECT \\$1:id::varchar as id, " +
+				"\\d+::integer as recorded, " +
+				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
+				"'potatoe'::varchar as dataset, " +
+				"\\$1::variant as entity " +
+				"FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 \\) AS src " +
+				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
+				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
+				"latest.entity = src.entity " +
+				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, entity\\) " +
+				"VALUES \\(src.id, src.recorded, src.deleted, src.dataset, src.entity\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectExec("ALTER STAGE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_DONE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 SWAP WITH POTATOE").WillReturnError(fmt.Errorf("error"))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO POTATOE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST SWAP WITH POTATOE_LATEST").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("DROP TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			postBody := strings.NewReader(`[{"id": "@context", "namespaces": {
+"x": "http://snowflake/foo/",
+"y": "http://snowflake/bar/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "x:1", "recorded": 1456456456, "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "recorded": 1456456457, "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
+`)
+			req, err := http.NewRequest("POST", "http://localhost:17866/datasets/potatoe/entities", postBody)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("universal-data-api-full-sync-start", "true")
+			req.Header.Set("universal-data-api-full-sync-end", "true")
+			req.Header.Set("universal-data-api-full-sync-id", "1234")
+
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("failed to post entities: %v", err)
+			}
+			if res.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", res.StatusCode)
+			}
+			f2, err := os.Open(f.Name())
+			if err != nil {
+				t.Fatalf("failed to open temp file: %v", err)
+			}
+			r, err := gzip.NewReader(f2)
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read gzip file: %v", err)
+			}
+			// println(string(bytes))
+			if string(bytes) != `{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
+{"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+` {
+				t.Fatalf("unexpected gzip file: %s", string(bytes))
 			}
 		})
 	})

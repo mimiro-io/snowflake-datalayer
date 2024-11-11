@@ -90,3 +90,7 @@ func (sf *SfDB) close() error {
 func (sf *SfDB) newConnection(ctx context.Context) (*sql.Conn, error) {
 	return sf.db.Conn(ctx)
 }
+
+func (sf *SfDB) HasLatestActive(definition *common.DatasetDefinition) bool {
+	return definition.SourceConfig[LatestTable] != nil && definition.SourceConfig[LatestTable].(bool)
+}

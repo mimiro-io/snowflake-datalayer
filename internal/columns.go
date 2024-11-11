@@ -20,10 +20,13 @@ import (
 	common "github.com/mimiro-io/common-datalayer"
 )
 
-func ColMappings(mapping *common.DatasetDefinition) (string, string, string) {
+func ColMappings(mapping *common.DatasetDefinition) (string, string, string, string, string) {
 	columns := ", entity"
 	columnTypes := ", entity variant"
-	colExtractions := ", $1::variant"
+	colExtractions := ", $1::variant as entity"
+	colAssignments := ", latest.entity = src.entity"
+	srcColExtractions := ", src.entity"
+
 	if mapping.IncomingMappingConfig != nil && mapping.IncomingMappingConfig.PropertyMappings != nil {
 		columns = ""
 		columnTypes = ""
@@ -43,23 +46,23 @@ func ColMappings(mapping *common.DatasetDefinition) (string, string, string) {
 				// if a Custom expression is provided, we expect it to be a SQL expression,
 				// like "now()::timestamp" or "$1.props:myprop::string"
 				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, col.Datatype)
-				colExtractions = fmt.Sprintf(`%s, %s`, colExtractions, col.Custom["expression"])
+				colExtractions = fmt.Sprintf(`%s, %s as %s`, colExtractions, col.Custom["expression"], col.Property)
 			} else if col.IsRecorded {
 				columnTypes = fmt.Sprintf("%s, %s INTEGER", columnTypes, col.Property)
-				colExtractions = fmt.Sprintf(`%s, $1:recorded::integer`, colExtractions)
+				colExtractions = fmt.Sprintf(`%s, $1:recorded::integer as recorded`, colExtractions)
 			} else if col.IsDeleted {
 				columnTypes = fmt.Sprintf("%s, %s BOOLEAN", columnTypes, col.Property)
-				colExtractions = fmt.Sprintf(`%s, $1:deleted::boolean`, colExtractions)
+				colExtractions = fmt.Sprintf(`%s, $1:deleted::boolean as deleted`, colExtractions)
 			} else if col.IsIdentity {
 				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
-				colExtractions = fmt.Sprintf(`%s, $1:id::%s`, colExtractions, t)
+				colExtractions = fmt.Sprintf(`%s, $1:id::%s as id`, colExtractions, t)
 			} else {
 				columnTypes = fmt.Sprintf("%s, %s %s", columnTypes, col.Property, t)
-				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s`, colExtractions, srcMap, col.EntityProperty, t)
+				colExtractions = fmt.Sprintf(`%s, $1:%s:"%s"::%s as %s`, colExtractions, srcMap, col.EntityProperty, t, col.Property)
 			}
 		}
 	}
-	return columns[2:], columnTypes[2:], colExtractions[2:]
+	return columns[2:], columnTypes[2:], colExtractions[2:], colAssignments[2:], srcColExtractions[2:]
 }
 
 func ColumnDDL(config *common.OutgoingMappingConfig) string {

@@ -174,19 +174,19 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 	defer func() {
 		_ = tx.Rollback()
 	}()
-	colNames, columns, colExtractions := ColMappings(datasetDefinition)
-	smt := fmt.Sprintf(`
-	CREATE TABLE IF NOT EXISTS %s (
-  		id varchar,
-		recorded integer,
-  		deleted boolean,
-  		dataset varchar,
-  		%s);
-	`, loadTableName, columns)
-
+	colNames, columns, colExtractions, colAssignments, srcColExtractions := ColMappings(datasetDefinition)
 	// println("\n", smt)
-	if _, err2 := tx.Exec(smt); err2 != nil {
+	if _, err2 := tx.Exec(fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS %s (id varchar, recorded integer, deleted boolean, dataset varchar, %s);`,
+		loadTableName, columns)); err2 != nil {
 		return err2
+	}
+	if sf.HasLatestActive(datasetDefinition) {
+		if _, err2 := tx.Exec(fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s_LATEST (id varchar, recorded integer, deleted boolean, dataset varchar, %s);`,
+			loadTableName, columns)); err2 != nil {
+			return err2
+		}
 	}
 
 	sf.logger.Debug(fmt.Sprintf("Loading fs table %s", loadTableName))
@@ -207,6 +207,35 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 		return err2
 	}
 
+	if sf.HasLatestActive(datasetDefinition) {
+		q = fmt.Sprintf(`
+	MERGE INTO %s_LATEST AS latest
+	USING (
+		SELECT
+		$1:id::varchar as id,
+		%v::integer as recorded,
+		coalesce($1:deleted::boolean, false) as deleted,
+		'%s'::varchar as dataset,
+		%s
+		FROM @%s
+	) AS src
+	ON latest.id = src.id
+	WHEN MATCHED THEN
+		UPDATE SET
+			latest.recorded = src.recorded,
+			latest.deleted = src.deleted,
+			latest.dataset = src.dataset,
+			%s
+	WHEN NOT MATCHED THEN
+		INSERT (id, recorded, deleted, dataset, %s)
+		VALUES (src.id, src.recorded, src.deleted, src.dataset, %s);
+`, loadTableName, loadTime, datasetDefinition.DatasetName, colExtractions,
+			stage, colAssignments, colNames, srcColExtractions)
+
+		if _, err := tx.Query(q); err != nil {
+			return err
+		}
+	}
 	_, err = tx.Exec(fmt.Sprintf("ALTER STAGE %s RENAME TO %s", stage, stage+"_DONE"))
 	if err != nil {
 		return err
@@ -226,6 +255,23 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 			return err
 		}
 	}
+
+	if sf.HasLatestActive(datasetDefinition) {
+		_, err = tx.Exec(fmt.Sprintf("ALTER TABLE %s_LATEST SWAP WITH %s_LATEST", loadTableName, tableName))
+		if err != nil {
+			// if swap fails, this could be the first full sync and tableName does not exist yet. so try rename
+			_, err = tx.Exec(fmt.Sprintf("ALTER TABLE %s_LATEST RENAME TO %s_LATEST", loadTableName, tableName))
+			if err != nil {
+				return err
+			}
+		} else {
+			// if swap was success, remove load table (which is now the old table)
+			_, err = tx.Exec(fmt.Sprintf("DROP TABLE %s_LATEST", loadTableName))
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return tx.Commit()
 }
 
@@ -243,19 +289,20 @@ func (sf *SfDB) loadFilesInStage(ctx context.Context, files []string, stage stri
 		_ = tx.Rollback()
 	}()
 
-	colNames, columns, colExtractions := ColMappings(datasetDefinition)
+	colNames, columns, colExtractions, colAssignments, srcColExtractions := ColMappings(datasetDefinition)
 	if _, err := tx.Exec(fmt.Sprintf(`
-	CREATE TABLE IF NOT EXISTS %s.%s (
-  		id varchar,
-		recorded integer,
-  		deleted boolean,
-  		dataset varchar,
-		%s
-	);
+	CREATE TABLE IF NOT EXISTS %s.%s ( id varchar, recorded integer, deleted boolean, dataset varchar, %s );
 	`, nameSpace, tableName, columns)); err != nil {
 		return err
 	}
 
+	if sf.HasLatestActive(datasetDefinition) {
+		if _, err := tx.Exec(fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %s.%s_LATEST ( id varchar, recorded integer, deleted boolean, dataset varchar, %s );
+	`, nameSpace, tableName, columns)); err != nil {
+			return err
+		}
+	}
 	fileString := "'" + strings.Join(files, "', '") + "'"
 
 	sf.logger.Debug(fmt.Sprintf("Loading %s", fileString))
@@ -275,6 +322,35 @@ func (sf *SfDB) loadFilesInStage(ctx context.Context, files []string, stage stri
 
 	if _, err := tx.Query(q); err != nil {
 		return err
+	}
+
+	if sf.HasLatestActive(datasetDefinition) {
+		q = fmt.Sprintf(`
+	MERGE INTO %s.%s_LATEST AS latest
+	USING (
+		SELECT
+		$1:id::varchar as id,
+		%v::integer as recorded,
+		coalesce($1:deleted::boolean, false) as deleted,
+		'%s'::varchar as dataset,
+		%s
+		FROM @%s (PATTERN => '.*(%s)')
+	) AS src
+	ON latest.id = src.id
+	WHEN MATCHED THEN
+		UPDATE SET
+			latest.recorded = src.recorded,
+			latest.deleted = src.deleted,
+			latest.dataset = src.dataset,
+			%s
+	WHEN NOT MATCHED THEN
+		INSERT (id, recorded, deleted, dataset, %s)
+		VALUES (src.id, src.recorded, src.deleted, src.dataset, %s);
+`, nameSpace, tableName, loadTime, datasetDefinition.DatasetName, colExtractions,
+			stage, strings.Join(files, "|"), colAssignments, colNames, srcColExtractions)
+		if _, err := tx.Query(q); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
