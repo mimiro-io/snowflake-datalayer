@@ -218,6 +218,7 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 		'%s'::varchar as dataset,
 		%s
 		FROM @%s
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY recorded DESC) = 1
 	) AS src
 	ON latest.id = src.id
 	WHEN MATCHED THEN
@@ -335,6 +336,7 @@ func (sf *SfDB) loadFilesInStage(ctx context.Context, files []string, stage stri
 		'%s'::varchar as dataset,
 		%s
 		FROM @%s (PATTERN => '.*(%s)')
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY recorded DESC) = 1
 	) AS src
 	ON latest.id = src.id
 	WHEN MATCHED THEN

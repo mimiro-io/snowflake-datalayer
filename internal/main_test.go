@@ -982,7 +982,8 @@ func TestWebServer(t *testing.T) {
 				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoe'::varchar as dataset, " +
 				"\\$1::variant as entity " +
-				"FROM @TESTDB.TESTSCHEMA.S_POTATOE \\(PATTERN \\=\\> '.*\\(zip.*\\)'\\) \\) AS src " +
+				"FROM @TESTDB.TESTSCHEMA.S_POTATOE \\(PATTERN \\=\\> '.*\\(zip.*\\)'\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY recorded DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
 				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
 				"latest.entity = src.entity " +
@@ -1098,7 +1099,8 @@ func TestWebServer(t *testing.T) {
 				"\\$1:id::varchar as id, \\d+::integer as recorded, coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoes'::varchar as dataset, \\$1:props:\"foo\"::varchar as foo, \\$1:props:\"ok\"::boolean as ok, " +
 				"\\$1:props:\"num\"::integer as num, \\$1:refs:\"baz\"::varchar as baz " +
-				"FROM @SFDB2.SFS2.S_POTATOE \\(PATTERN => '.*\\(zip.*\\)'\\) \\) AS src " +
+				"FROM @SFDB2.SFS2.S_POTATOE \\(PATTERN => '.*\\(zip.*\\)'\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY recorded DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET latest.recorded = src.recorded, " +
 				"latest.deleted = src.deleted, latest.dataset = src.dataset, latest.entity = src.entity " +
 				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, foo, ok, num, baz\\) VALUES \\(" +
@@ -1237,7 +1239,6 @@ func TestWebServer(t *testing.T) {
 			}
 		})
 		t.Run("fullsync with LATEST_ACTIVE", func(t *testing.T) {
-
 			setup()
 			t.Cleanup(cleanup)
 			f, err := os.CreateTemp("", "zip")
@@ -1292,7 +1293,8 @@ func TestWebServer(t *testing.T) {
 				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoe'::varchar as dataset, " +
 				"\\$1::variant as entity " +
-				"FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 \\) AS src " +
+				"FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY recorded DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
 				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
 				"latest.entity = src.entity " +
