@@ -982,8 +982,8 @@ func TestWebServer(t *testing.T) {
 				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoe'::varchar as dataset, " +
 				"\\$1::variant as entity " +
-				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix FROM @TESTDB.TESTSCHEMA.S_POTATOE \\(PATTERN \\=\\> '.*\\(zip.*\\)'\\)\\) " +
-				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, ix DESC\\) \\= 1 \\) AS src " +
+				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix, METADATA\\$FILE_LAST_MODIFIED AS fts FROM @TESTDB.TESTSCHEMA.S_POTATOE \\(PATTERN \\=\\> '.*\\(zip.*\\)'\\)\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, fts DESC, ix DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
 				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
 				"latest.entity = src.entity " +
@@ -1099,8 +1099,8 @@ func TestWebServer(t *testing.T) {
 				"\\$1:id::varchar as id, \\d+::integer as recorded, coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoes'::varchar as dataset, \\$1:props:\"foo\"::varchar as foo, \\$1:props:\"ok\"::boolean as ok, " +
 				"\\$1:props:\"num\"::integer as num, \\$1:refs:\"baz\"::varchar as baz " +
-				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix FROM @SFDB2.SFS2.S_POTATOE \\(PATTERN => '.*\\(zip.*\\)'\\)\\) " +
-				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, ix DESC\\) \\= 1 \\) AS src " +
+				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix, METADATA\\$FILE_LAST_MODIFIED AS fts FROM @SFDB2.SFS2.S_POTATOE \\(PATTERN => '.*\\(zip.*\\)'\\)\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, fts DESC, ix DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET latest.recorded = src.recorded, " +
 				"latest.deleted = src.deleted, latest.dataset = src.dataset, latest.entity = src.entity " +
 				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, foo, ok, num, baz\\) VALUES \\(" +
@@ -1293,8 +1293,8 @@ func TestWebServer(t *testing.T) {
 				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
 				"'potatoe'::varchar as dataset, " +
 				"\\$1::variant as entity " +
-				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\) " +
-				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, ix DESC\\) \\= 1 \\) AS src " +
+				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix, METADATA\\$FILE_LAST_MODIFIED AS fts FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, fts DESC, ix DESC\\) \\= 1 \\) AS src " +
 				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
 				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
 				"latest.entity = src.entity " +

@@ -217,8 +217,8 @@ func (sf *SfDB) loadStage(ctx context.Context, stage string, loadTime int64, dat
 		coalesce($1:deleted::boolean, false) as deleted,
 		'%s'::varchar as dataset,
 		%s
-		FROM (SELECT $1, METADATA$FILE_ROW_NUMBER AS ix FROM @%s)
-		QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY $1:recorded DESC, ix DESC) = 1
+		FROM (SELECT $1, METADATA$FILE_ROW_NUMBER AS ix, METADATA$FILE_LAST_MODIFIED AS fts FROM @%s)
+		QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY $1:recorded DESC, fts DESC, ix DESC) = 1
 	) AS src
 	ON latest.id = src.id
 	WHEN MATCHED THEN
@@ -335,8 +335,8 @@ func (sf *SfDB) loadFilesInStage(ctx context.Context, files []string, stage stri
 		coalesce($1:deleted::boolean, false) as deleted,
 		'%s'::varchar as dataset,
 		%s
-		FROM (SELECT $1, METADATA$FILE_ROW_NUMBER AS ix FROM @%s (PATTERN => '.*(%s)'))
-		QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY $1:recorded DESC, ix DESC) = 1
+		FROM (SELECT $1, METADATA$FILE_ROW_NUMBER AS ix, METADATA$FILE_LAST_MODIFIED AS fts FROM @%s (PATTERN => '.*(%s)'))
+		QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY $1:recorded DESC, fts DESC, ix DESC) = 1
 	) AS src
 	ON latest.id = src.id
 	WHEN MATCHED THEN
