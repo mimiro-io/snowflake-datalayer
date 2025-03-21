@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS build_env
+FROM golang:1.24-alpine AS build_env
 
 # Install git + SSL ca certificates.
 # Git is required for fetching the dependencies.
