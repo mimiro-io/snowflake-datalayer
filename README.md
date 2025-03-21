@@ -34,6 +34,7 @@ SNOWFLAKE_ACCOUNT=snowflake account
 SNOWFLAKE_DB=snowflake database
 SNOWFLAKE_SCHEMA=snowflake schema
 SNOWFLAKE_WAREHOUSE=snowflake warehouse
+LATEST_TABLE=true #optional
 ```
 
 ## Connecting to Snowflake
@@ -61,6 +62,12 @@ In Incremental sync, it will append to the table with the new entities.
 There is no guarantee for uniqueness of the entities in the table, but the written table rows contain a
 recorded timestamp, which can be used to pick the latest duplicates. Also note that entities may be in
 a deleted state. use the `deleted` field to filter them out.
+
+If the layer is configured with the `LATEST_TABLE=true` env option, the layer will additionally create a table with the
+name of the dataset and the suffix `_latest`. The layer will maintain the latest version of each entity in this table, using
+upserts. Note that the layer never deletes, deleted entities are marked by the deleted flag.
+
+This system-wide latest_table option can be overridden by setting the `latest_table` flag in the dataset configuration.
 
 ### Reading from Snowflake
 

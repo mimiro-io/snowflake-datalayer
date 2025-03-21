@@ -92,5 +92,13 @@ func (sf *SfDB) newConnection(ctx context.Context) (*sql.Conn, error) {
 }
 
 func (sf *SfDB) HasLatestActive(definition *common.DatasetDefinition) bool {
-	return definition.SourceConfig[LatestTable] != nil && definition.SourceConfig[LatestTable].(bool)
+	latestVal := definition.SourceConfig[LatestTable]
+	globalLatestVal := sf.conf.NativeSystemConfig[LatestTable]
+	if latestVal == nil && globalLatestVal == nil {
+		return false
+	}
+	if latestVal != nil {
+		return latestVal.(bool)
+	}
+	return globalLatestVal.(bool)
 }
