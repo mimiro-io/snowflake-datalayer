@@ -17,6 +17,7 @@ package layer
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	common "github.com/mimiro-io/common-datalayer"
@@ -90,6 +91,14 @@ func EnvOverrides(config *common.Config) error {
 	if v, ok := os.LookupEnv("SNOWFLAKE_PRIVATE_KEY"); ok {
 		config.NativeSystemConfig[SnowflakePrivateKey] = v
 	}
+	if v, ok := os.LookupEnv("LATEST_TABLE"); ok {
+		boolValue, err := strconv.ParseBool(v)
+		if err != nil {
+			return err
+		}
+
+		config.NativeSystemConfig[LatestTable] = boolValue
+	}
 	return nil
 }
 
@@ -126,7 +135,7 @@ func validateConfig(conf *common.Config) error {
 
 // UpdateConfiguration implements common_datalayer.DataLayerService.
 // we only dynamically update the mapping config.
-// the rest of the config is static and loaderd in NewSnowflakeDataLayer
+// the rest of the config is static and loaded in NewSnowflakeDataLayer
 func (dl *SnowflakeDataLayer) UpdateConfiguration(config *common.Config) common.LayerError {
 	existingDatasets := map[string]bool{}
 	// update existing datasets

@@ -39,11 +39,15 @@ func TestWebServer(t *testing.T) {
 	var testLayer *SnowflakeDataLayer
 	var tDB db
 	cnt := 0
-	setup := func() {
+	setup := func(latestDefault ...bool) {
 		cnt++
 		// fmt.Printf("setup: %v\n", cnt)
 		cfg, _, _ = testDeps()
 		cfg.LayerServiceConfig.LogLevel = "error"
+
+		if len(latestDefault) > 0 {
+			cfg.NativeSystemConfig[LatestTable] = latestDefault[0]
+		}
 
 		tmpDir := t.TempDir()
 		jsonConf, _ := json.Marshal(cfg)
@@ -1256,6 +1260,119 @@ func TestWebServer(t *testing.T) {
 					Schema:      "TESTSCHEMA",
 					Database:    "TESTDB",
 					LatestTable: true,
+				},
+			}}
+			testLayer.UpdateConfiguration(cfg)
+			mock.ExpectQuery("SHOW STAGES LIKE '%POTATOE_FSID_%' IN TESTDB.TESTSCHEMA;select .* FROM table\\(RESULT_SCAN\\(LAST_QUERY_ID\\(\\)\\)\\)").
+				WillReturnRows(sqlmock.NewRows([]string{}))
+			// not checking for actual sql, this is regex and it does like all syntax as is
+			mock.ExpectExec(`CREATE STAGE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234`).WillReturnResult(sqlmock.NewResult(1, 1))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery(fmt.Sprintf(`PUT file://%v`, f.Name())).
+				WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			//// new conn
+			//mock.ExpectExec("ALTER SESSION SET GO_QUERY_RESULT_FORMAT = 'JSON'").WillReturnResult(sqlmock.NewResult(1, 1))
+			//mock.ExpectExec("USE SECONDARY ROLES ALL").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectBegin()
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 \\(id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant\\);").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("CREATE TABLE IF NOT EXISTS TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST \\(id varchar, recorded integer," +
+				" deleted boolean, dataset varchar, entity variant\\);").WillReturnResult(sqlmock.NewResult(1, 1))
+
+			mock.ExpectQuery("COPY INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\(id, recorded, deleted, dataset, entity\\) FROM \\( " +
+				"SELECT \\$1:id::varchar, \\d+::integer, coalesce\\(\\$1:deleted::boolean, false\\), 'potatoe'::varchar, " +
+				"\\$1::variant as entity FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234" +
+				"\\) FILE_FORMAT = \\(TYPE='json' COMPRESSION=GZIP\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectQuery("MERGE INTO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST AS latest " +
+				"USING \\( SELECT \\$1:id::varchar as id, " +
+				"\\d+::integer as recorded, " +
+				"coalesce\\(\\$1:deleted::boolean, false\\) as deleted, " +
+				"'potatoe'::varchar as dataset, " +
+				"\\$1::variant as entity " +
+				"FROM \\(SELECT \\$1, METADATA\\$FILE_ROW_NUMBER AS ix, METADATA\\$FILE_LAST_MODIFIED AS fts FROM @TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234\\) " +
+				"QUALIFY ROW_NUMBER\\(\\) OVER \\(PARTITION BY id ORDER BY \\$1:recorded DESC, fts DESC, ix DESC\\) \\= 1 \\) AS src " +
+				"ON latest.id = src.id WHEN MATCHED THEN UPDATE SET " +
+				"latest.recorded = src.recorded, latest.deleted = src.deleted, latest.dataset = src.dataset, " +
+				"latest.entity = src.entity " +
+				"WHEN NOT MATCHED THEN INSERT \\(id, recorded, deleted, dataset, entity\\) " +
+				"VALUES \\(src.id, src.recorded, src.deleted, src.dataset, src.entity\\);",
+			).WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("OK"))
+
+			mock.ExpectExec("ALTER STAGE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_DONE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 SWAP WITH POTATOE").WillReturnError(fmt.Errorf("error"))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234 RENAME TO POTATOE").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("ALTER TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST SWAP WITH POTATOE_LATEST").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectExec("DROP TABLE TESTDB.TESTSCHEMA.S_POTATOE_FSID_1234_LATEST").WillReturnResult(sqlmock.NewResult(1, 1))
+			mock.ExpectCommit()
+
+			postBody := strings.NewReader(`[{"id": "@context", "namespaces": {
+"x": "http://snowflake/foo/",
+"y": "http://snowflake/bar/",
+"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+}},
+{"id": "x:1", "recorded": 1456456456, "props": {"x:foo": "bar"}, "refs": {"x:baz": "y:hello"}},
+{"id": "x:2", "recorded": 1456456457, "props": {"x:foo": "bar2"}, "refs":{"x:baz": ["y:hi", "y:bye"]}}]
+`)
+			req, err := http.NewRequest("POST", "http://localhost:17866/datasets/potatoe/entities", postBody)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("universal-data-api-full-sync-start", "true")
+			req.Header.Set("universal-data-api-full-sync-end", "true")
+			req.Header.Set("universal-data-api-full-sync-id", "1234")
+
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("failed to post entities: %v", err)
+			}
+			if res.StatusCode != 200 {
+				t.Fatalf("expected 200, got %d", res.StatusCode)
+			}
+			f2, err := os.Open(f.Name())
+			if err != nil {
+				t.Fatalf("failed to open temp file: %v", err)
+			}
+			r, err := gzip.NewReader(f2)
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			bytes, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("failed to read gzip file: %v", err)
+			}
+			// println(string(bytes))
+			if string(bytes) != `{"id":"http://snowflake/foo/1","recorded":1456456456,"refs":{"http://snowflake/foo/baz":"http://snowflake/bar/hello"},"props":{"http://snowflake/foo/foo":"bar"}}
+{"id":"http://snowflake/foo/2","recorded":1456456457,"refs":{"http://snowflake/foo/baz":["http://snowflake/bar/hi","http://snowflake/bar/bye"]},"props":{"http://snowflake/foo/foo":"bar2"}}
+` {
+				t.Fatalf("unexpected gzip file: %s", string(bytes))
+			}
+		})
+		t.Run("fullsync with LATEST_ACTIVE from default", func(t *testing.T) {
+			setup(true)
+			t.Cleanup(cleanup)
+			f, err := os.CreateTemp("", "zip")
+			if err != nil {
+				t.Fatalf("failed to create temp file: %v", err)
+			}
+			testLayer.db.(*testDB).NewTmpFile = func(ds string) (*os.File, func(), error) {
+				return f, func() {}, err
+			}
+			defer os.Remove(f.Name())
+			cfg.DatasetDefinitions = []*common_datalayer.DatasetDefinition{{
+				DatasetName: "potatoe",
+				SourceConfig: map[string]any{
+					TableName: "potatoe",
+					Schema:    "TESTSCHEMA",
+					Database:  "TESTDB",
 				},
 			}}
 			testLayer.UpdateConfiguration(cfg)

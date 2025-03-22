@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"time"
 
@@ -64,6 +65,9 @@ func newSfDB(conf *common.Config, logger common.Logger, metrics common.Metrics) 
 	connectionString = s
 	// println(connectionString)
 	logger.Info("opening db")
+	if conf.NativeSystemConfig[LatestTable] != nil {
+		logger.Info(fmt.Sprintf("latest table is set to %v", conf.NativeSystemConfig[LatestTable]))
+	}
 	db, err := sql.Open("snowflake", connectionString)
 	if err != nil {
 		return nil, err
@@ -92,5 +96,13 @@ func (sf *SfDB) newConnection(ctx context.Context) (*sql.Conn, error) {
 }
 
 func (sf *SfDB) HasLatestActive(definition *common.DatasetDefinition) bool {
-	return definition.SourceConfig[LatestTable] != nil && definition.SourceConfig[LatestTable].(bool)
+	latestVal := definition.SourceConfig[LatestTable]
+	globalLatestVal := sf.conf.NativeSystemConfig[LatestTable]
+	if latestVal == nil && globalLatestVal == nil {
+		return false
+	}
+	if latestVal != nil {
+		return latestVal.(bool)
+	}
+	return globalLatestVal.(bool)
 }
