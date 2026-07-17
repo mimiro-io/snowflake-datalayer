@@ -90,16 +90,17 @@ func TestWebServer(t *testing.T) {
 		}
 		ts := time.Now()
 		for {
+			// server.Start starts the http server in a goroutine and returns
+			// immediately, so poll /health until the listener is up. A connection
+			// error here just means "not ready yet", so retry until the timeout.
 			health, err := http.Get("http://localhost:17866/health")
-			if err != nil {
-				t.Fatalf("failed to check health: %v", err)
-			}
-			if health.StatusCode == 200 {
+			if err == nil && health.StatusCode == 200 {
 				break
 			}
 			if time.Since(ts) > 10*time.Second {
-				t.Fatalf("failed to start server")
+				t.Fatalf("failed to start server: %v", err)
 			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 	cleanup := func() {
