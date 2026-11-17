@@ -187,6 +187,11 @@ func (l *testLogger) Warn(message string, args ...any) {
 	l.log(message, "WARN", args...)
 }
 
+func (l *testLogger) Debugf(format string, args ...any) { l.Debug(fmt.Sprintf(format, args...)) }
+func (l *testLogger) Errorf(format string, args ...any) { l.Error(fmt.Sprintf(format, args...)) }
+func (l *testLogger) Infof(format string, args ...any)  { l.Info(fmt.Sprintf(format, args...)) }
+func (l *testLogger) Warnf(format string, args ...any)  { l.Warn(fmt.Sprintf(format, args...)) }
+
 // With implements common_datalayer.Logger.
 func (l *testLogger) With(name string, value string) common.Logger {
 	// ignore

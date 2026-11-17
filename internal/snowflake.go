@@ -25,7 +25,7 @@ import (
 	"time"
 
 	common "github.com/mimiro-io/common-datalayer"
-	gsf "github.com/snowflakedb/gosnowflake"
+	gsf "github.com/snowflakedb/gosnowflake/v2"
 )
 
 type SfDB struct {

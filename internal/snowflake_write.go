@@ -24,7 +24,7 @@ import (
 
 	common "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
-	gsf "github.com/snowflakedb/gosnowflake"
+	gsf "github.com/snowflakedb/gosnowflake/v2"
 )
 
 func (sf *SfDB) putEntities(ctx context.Context, datasetName string, stage string, entities []*egdm.Entity) ([]string, error) {
@@ -100,12 +100,7 @@ func (sf *SfDB) mkStage(ctx context.Context, syncID string, datasetName string, 
 		query := "SHOW STAGES LIKE '%" + dsName + "_FSID_%' IN " + dbName + "." + schemaName
 		query = query + ";select \"name\" FROM table(RESULT_SCAN(LAST_QUERY_ID()))"
 		// println(query)
-		mctx, err := gsf.WithMultiStatement(ctx, 2)
-		if err != nil {
-			sf.logger.Error("Failed to create multistatement context", "error", err)
-			return "", err
-		}
-		rows, err := conn.QueryContext(mctx, query)
+		rows, err := conn.QueryContext(gsf.WithMultiStatement(ctx, 2), query)
 
 		defer func() {
 			if rows != nil {
