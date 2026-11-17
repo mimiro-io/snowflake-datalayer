@@ -24,8 +24,6 @@ import (
 	"strings"
 	"time"
 
-	gsf "github.com/snowflakedb/gosnowflake"
-
 	common "github.com/mimiro-io/common-datalayer"
 	egdm "github.com/mimiro-io/entity-graph-data-model"
 )
@@ -135,8 +133,7 @@ func (q *sfQuery) withLimit(limit int) (query, error) {
 func (q *sfQuery) run(ctx context.Context, releaseConn func()) (common.EntityIterator, common.LayerError) {
 	conn := q.ctx.Value(Connection).(*sql.Conn)
 	q.logger.Debug(q.queryString)
-	qctx := gsf.WithStreamDownloader(ctx)
-	rows, err := conn.QueryContext(qctx, q.queryString)
+	rows, err := conn.QueryContext(ctx, q.queryString)
 	if err != nil {
 		q.logger.Error("failed to query snowflake", "error", err)
 		releaseConn()

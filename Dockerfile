@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS build
+FROM golang:1.27.4-alpine AS build
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -22,6 +22,8 @@ RUN go vet ./... && \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /app/snowflake-datalayer /
+
+USER nonroot
 
 # server configs
 ENV LOG_TYPE=json \
